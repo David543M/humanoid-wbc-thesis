@@ -448,6 +448,7 @@ IRP/
 ├── 04_council_analysis/       ← contradictions.md, consensus.md, gaps.md, confidence_scores.md
 ├── 05_targeted_research/      ← refined_sources.md, gap_filling_reports/
 ├── 06_writing/                ← outline.md, draft_v1.md, draft_v2.md, final_review.md, chapters/
+│                                 overleaf_template_guide.md ← NOUVEAU — doc du template LaTeX
 ├── 07_review/                 ← adversarial_review.md, supervisor_feedback.md, revisions.md
 ├── 08_references/             ← validated_sources.md, zotero_exports/
 ├── 09_appendices/             ← code/, figures/, datasets/
@@ -455,6 +456,7 @@ IRP/
 ├── 11_experiments/            ← Experiment logs and outputs
 ├── 12_meetings/               ← Supervisor meeting notes
 ├── 13_logbook/                ← Daily research log
+├── humanoid_wbc_thesis_overleaf.zip  ← Template LaTeX Overleaf (prêt à importer)
 └── master_memory.md           ← THIS FILE
 ```
 
@@ -481,6 +483,8 @@ IRP/
 |------|--------------|-------------------|----------------|
 | 2026-04-22 | Master memory file created | Template finalized; thesis structure confirmed | master_memory.md (created) |
 | 2026-04-22 | GitHub repository initialized | Repo created at github.com/David543M/humanoid-wbc-thesis; full workspace pushed to main; token security rule established | README.md (enriched), master_memory.md (§20 added), setup_github_repo.py (token removed) |
+| 2026-04-22 | Overleaf LaTeX template created | Template complet 7 chapitres (0 erreur, 41 pages) — notation canonique, environnements criticalinsight/hypothesis/researchgap, 9 sources BibTeX, structure liée à master_memory | humanoid_wbc_thesis_overleaf.zip (racine), 06_writing/overleaf_template_guide.md (nouveau), master_memory.md (§21 file structure mis à jour) |
+| 2026-04-22 | WBC Council rerun (literature-review framing) — integration deliverable produced | Synthesized review (SLR) confirmed as Chapter 2 scaffold; integration plan committed; council recommends closing PQ1–PQ4 with defaults (TALOS primary, MuJoCo primary + Drake secondary, weighted single-QP + centroidal MPC, evaluation-protocol reframed as contribution); contact-consistency discussion reassigned to Ch. 4 / Ch. 6; publication-positioning framing deprecated as rerun scope change | 04_council_analysis/WBC_Council_2026-04-22/04_Thesis_Chapter_Integration_and_Recommendations.md (created); 04_Publication_Positioning_and_Recommendations.md (now legacy) |
 
 ---
 
