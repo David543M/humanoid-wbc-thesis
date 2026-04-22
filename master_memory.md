@@ -403,7 +403,41 @@ Contribution (reproducible framework + evaluation protocol + critical analysis)
 
 ---
 
-## 20. 📁 File Structure Reference
+## 20. 🔗 Version Control & GitHub
+
+### 20.1 Repository
+- **URL:** [https://github.com/David543M/humanoid-wbc-thesis](https://github.com/David543M/humanoid-wbc-thesis)
+- **Visibility:** Public
+- **Default branch:** `main`
+- **Created:** 2026-04-22
+
+### 20.2 Branching Strategy
+
+| Branch pattern | Purpose |
+|---------------|---------|
+| `main` | Stable state — always reflects current thesis |
+| `chapter/N-title` | One branch per chapter draft |
+| `sim/feature-name` | Simulation development |
+| `fix/description` | Corrections and revisions |
+
+### 20.3 Commit Conventions
+
+| Prefix | Use |
+|--------|-----|
+| `[chapter-N]` | Chapter writing or update |
+| `[sim]` | Simulation development |
+| `[lit]` | Literature / research update |
+| `[mem]` | `master_memory.md` update |
+| `[fix]` | Correction or revision |
+
+### 20.4 Token Security Rule
+- **Never hardcode the GitHub PAT in any versioned file**
+- Always use: `$env:GITHUB_TOKEN = "..."` (PowerShell) or `export GITHUB_TOKEN=...` (bash)
+- The `setup_github_repo.py` script reads from `os.environ.get("GITHUB_TOKEN")`
+
+---
+
+## 21. 📁 File Structure Reference
 
 ```
 IRP/
@@ -441,11 +475,12 @@ IRP/
 
 ---
 
-## 22. 🗓️ Session Log (Append After Each Work Session)
+## 23. 🗓️ Session Log (Append After Each Work Session)
 
 | Date | Session Focus | Key Decisions Made | Files Modified |
 |------|--------------|-------------------|----------------|
 | 2026-04-22 | Master memory file created | Template finalized; thesis structure confirmed | master_memory.md (created) |
+| 2026-04-22 | GitHub repository initialized | Repo created at github.com/David543M/humanoid-wbc-thesis; full workspace pushed to main; token security rule established | README.md (enriched), master_memory.md (§20 added), setup_github_repo.py (token removed) |
 
 ---
 
