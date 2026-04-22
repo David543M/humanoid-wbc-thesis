@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+env/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Simulation artefacts
+*.bag
+*.log
+*.csv.bak
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Large binary files (add manually if needed)
+*.pkl
+*.h5
+*.hdf5
+*.pt
+*.pth
+
+# Secrets (never commit tokens)
+*.env
+.env*
+secrets.py
