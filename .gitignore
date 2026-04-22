@@ -1,4 +1,39 @@
-# Python
+# ============================================================
+# THESIS GITHUB — FILES LOCAL-ONLY (never push to GitHub)
+# Rule: GitHub is for thesis content visible to supervisors.
+#       All AI tooling, prompts, and session traces stay local.
+# ============================================================
+
+# AI workflow — prompts and query files
+01_prompts/
+
+# AI-generated raw research outputs
+02_raw_research/
+
+# AI processing intermediaries
+03_processed/
+
+# AI council sessions and analyses
+04_council_analysis/
+
+# AI targeted research / gap-filling outputs
+05_targeted_research/
+
+# AI adversarial review (internal tooling only)
+07_review/adversarial_review.md
+
+# AI session memory (internal Claude state)
+master_memory.md
+
+# AI tooling scripts
+setup_github_repo.py
+
+# AI session logbook
+13_logbook/
+
+# ============================================================
+# PYTHON
+# ============================================================
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -10,24 +45,32 @@ build/
 # Jupyter
 .ipynb_checkpoints/
 
-# Simulation artefacts
+# ============================================================
+# SIMULATION ARTEFACTS
+# ============================================================
 *.bag
 *.log
 *.csv.bak
 
+# ============================================================
 # OS
+# ============================================================
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Large binary files (add manually if needed)
+# ============================================================
+# LARGE BINARY / MODEL FILES (add manually if needed)
+# ============================================================
 *.pkl
 *.h5
 *.hdf5
 *.pt
 *.pth
 
-# Secrets (never commit tokens)
+# ============================================================
+# SECRETS — NEVER COMMIT
+# ============================================================
 *.env
 .env*
 secrets.py
