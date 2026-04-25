@@ -1,0 +1,154 @@
+% ============================================================
+% FIGURE: WBC Key Contributions Timeline 2005-2026 — Ch2, §2.3
+% Anchor: \input{figures/fig_wbc_timeline} in ch2_state_of_the_art.tex
+% Required packages: tikz, tikzlibrary{arrows.meta,positioning,decorations.pathreplacing}
+% Width: full text width (\textwidth)
+% ============================================================
+\begin{tikzpicture}[
+  font=\scriptsize,
+  x=1.15cm, y=1cm,
+  % Styles
+  modelbased/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!60!black, fill=blue!9, line width=0.7pt,
+    text width=2.1cm, minimum height=0.55cm,
+    align=center, font=\scriptsize
+  },
+  modelbased_key/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!80!black, fill=blue!18, line width=1pt,
+    text width=2.1cm, minimum height=0.6cm,
+    align=center, font=\scriptsize\bfseries
+  },
+  learning/.style={
+    rectangle, rounded corners=2pt,
+    draw=gray!50, fill=gray!8, line width=0.6pt,
+    text width=2.1cm, minimum height=0.5cm,
+    align=center, font=\scriptsize, text=gray!65
+  },
+  thesis/.style={
+    rectangle, rounded corners=3pt,
+    draw=orange!80!black, fill=orange!12, line width=1.2pt,
+    text width=2.3cm, minimum height=0.65cm,
+    align=center, font=\scriptsize\bfseries, text=orange!80!black
+  },
+  tick/.style={draw=black!50, line width=0.7pt},
+  yearlab/.style={font=\scriptsize, text=black!60},
+  connector/.style={draw=black!40, line width=0.6pt, -{Stealth[length=3pt]}},
+  conngray/.style={draw=gray!40, line width=0.5pt, -{Stealth[length=3pt]}, dashed},
+]
+
+%% ---- TIMELINE AXIS ----
+% x positions: 2005=0, 2008=1, 2011=2, 2013=3, 2014=4, 2016=5, 2018=6, 2019=7, 2020=8, 2022=9, 2023=10, 2025=11, 2026=12
+\def\xmin{-0.3}
+\def\xmax{12.5}
+
+\draw[line width=1.2pt, black!60, -{Stealth[length=6pt]}]
+  (\xmin, 0) -- (\xmax, 0);
+
+%% Year ticks and labels
+\foreach \yr/\x in {2005/0, 2008/1, 2011/2, 2013/3, 2014/4, 2016/5, 2018/6, 2019/7, 2020/8, 2022/9, 2023/10, 2025/11, 2026/12}{
+  \draw[tick] (\x, -0.12) -- (\x, 0.12);
+  \node[yearlab] at (\x, -0.38) {\yr};
+}
+
+%% ---- MODEL-BASED (ABOVE AXIS) ----
+
+% 2005 — Sentis & Khatib (KEY)
+\node[modelbased_key] (n05) at (0, 1.55)
+  {Sentis \& Khatib\\Task-priority WBC\\\cite{Sentis2005}};
+\draw[connector] (0, 0.12) -- (n05.south);
+
+% 2011 — Kanoun
+\node[modelbased] (n11) at (2, 1.4)
+  {Kanoun et al.\\Kinematic HQP\\\cite{Kanoun2011}};
+\draw[connector] (2, 0.12) -- (n11.south);
+
+% 2013 — Wensing (KEY) + Saab
+\node[modelbased_key] (n13a) at (3, 2.5)
+  {Wensing \& Orin\\QP-WBC conic\\\cite{Wensing2013}};
+\node[modelbased] (n13b) at (3, 1.35)
+  {Saab et al.\\Dynamic HQP\\\cite{Saab2013}};
+\draw[connector] (3, 0.12) -- (n13b.south);
+\draw[connector] (n13b.north) -- (n13a.south);
+
+% 2014 — Herzog + Escande
+\node[modelbased] (n14a) at (4, 1.35)
+  {Herzog et al.\\Momentum bal.\\\cite{Herzog2014}};
+\node[modelbased] (n14b) at (4, 2.4)
+  {Escande et al.\\HQP efficient\\\cite{EscandeMansard2014}};
+\draw[connector] (4, 0.12) -- (n14a.south);
+\draw[connector] (n14a.north) -- (n14b.south);
+
+% 2016 — Koolen (KEY) + DelPrete
+\node[modelbased_key] (n16a) at (5, 2.5)
+  {Koolen et al.\\Atlas momentum\\\cite{Koolen2016}};
+\node[modelbased] (n16b) at (5, 1.35)
+  {Del Prete et al.\\TSID library\\\cite{DelPrete2016}};
+\draw[connector] (5, 0.12) -- (n16b.south);
+\draw[connector] (n16b.north) -- (n16a.south);
+
+% 2018 — Winkler
+\node[modelbased] (n18) at (6, 1.4)
+  {Winkler et al.\\TOWR traj. opt.\\\cite{Winkler2018}};
+\draw[connector] (6, 0.12) -- (n18.south);
+
+% 2019 — Caron + Pinocchio
+\node[modelbased] (n19a) at (7, 2.4)
+  {Caron et al.\\Stair climbing\\\cite{Caron2019}};
+\node[modelbased] (n19b) at (7, 1.35)
+  {Carpentier et al.\\Pinocchio lib.\\\cite{Pinocchio2019}};
+\draw[connector] (7, 0.12) -- (n19b.south);
+\draw[connector] (n19b.north) -- (n19a.south);
+
+% 2020 — Crocoddyl
+\node[modelbased] (n20) at (8, 1.4)
+  {Mastalli et al.\\Crocoddyl FDDP\\\cite{Crocoddyl2020}};
+\draw[connector] (8, 0.12) -- (n20.south);
+
+% 2022 — Fernbach
+\node[modelbased] (n22) at (9, 1.4)
+  {Fernbach et al.\\TALOS benchmark\\\cite{Fernbach2022}};
+\draw[connector] (9, 0.12) -- (n22.south);
+
+% 2023 — Elobaid
+\node[modelbased] (n23) at (10, 1.4)
+  {Elobaid et al.\\NL-MPC iCub3\\\cite{Elobaid2023}};
+\draw[connector] (10, 0.12) -- (n23.south);
+
+% 2025 — Recent QP scaling
+\node[modelbased] (n25) at (11, 1.4)
+  {Liu, Wang,\\Smaldone et al.\\QP scaling};
+\draw[connector] (11, 0.12) -- (n25.south);
+
+%% ---- LEARNING-BASED (BELOW AXIS) ----
+
+% 2021 — Kumar
+\node[learning] (l21) at (8.5, -1.2)
+  {Kumar et al.\\RMA adapt. RL\\\cite{Kumar2021}};
+\draw[conngray] (8.5, -0.12) -- (l21.north);
+
+% 2024 — HumanoidBench
+\node[learning] (l24) at (10, -1.2)
+  {Sferrazza et al.\\HumanoidBench\\RSS 2024};
+\draw[conngray] (10, -0.12) -- (l24.north);
+
+%% ---- THESIS MARKER ----
+\node[thesis] (nth) at (12, 1.6)
+  {This thesis\\MPC+QP-WBC\\S1--S5 protocol};
+\draw[connector, draw=orange!80!black, line width=1pt]
+  (12, 0.12) -- (nth.south);
+
+%% ---- LEGEND ----
+\node[modelbased_key, text width=1.6cm, minimum height=0.4cm, font=\tiny\bfseries]
+  at (-0.1, -1.7) {Model-based\\(key)};
+\node[modelbased, text width=1.6cm, minimum height=0.4cm, font=\tiny]
+  at (1.9, -1.7) {Model-based};
+\node[learning, text width=1.6cm, minimum height=0.4cm, font=\tiny]
+  at (3.8, -1.7) {Learning-based};
+\node[thesis, text width=1.6cm, minimum height=0.4cm, font=\tiny\bfseries]
+  at (5.7, -1.7) {This thesis};
+
+\node[font=\tiny, text=black!45] at (8.5, -1.85) {Legend};
+
+\end{tikzpicture}
