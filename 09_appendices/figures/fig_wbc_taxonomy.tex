@@ -52,9 +52,9 @@
 \draw[edge] (root.south) -- ++(0,-0.35) -| (lb.north);
 
 %% LEVEL 3 — MODEL-BASED
-\node[leaf, below=1.0cm of mb, xshift=-2.2cm] (ns) {Task-Priority\\Null-Space\\{\tiny\protect\cite{Khatib1987}, \protect\cite{Sentis2005}}};
-\node[leaf, below=1.0cm of mb]                (qp) {QP-based WBC\\weighted \& HQP\\{\tiny\protect\cite{Wensing2013}, \protect\cite{Koolen2016}}};
-\node[leaf, below=1.0cm of mb, xshift=+2.2cm] (mpc) {MPC for Locomotion\\centroidal\\{\tiny\protect\cite{Caron2019}, \protect\cite{Winkler2018}}};
+\node[leaf, below=1.0cm of mb, xshift=-2.2cm] (ns) {Task-Priority\\Null-Space\\{\tiny[Khatib~1987; Sentis~2005]}};
+\node[leaf, below=1.0cm of mb]                (qp) {QP-based WBC\\weighted \& HQP\\{\tiny[Wensing~2013; Koolen~2016]}};
+\node[leaf, below=1.0cm of mb, xshift=+2.2cm] (mpc) {MPC for Locomotion\\centroidal\\{\tiny[Caron~2019; Winkler~2018]}};
 
 \draw[edge] (mb.south) -- ++(0,-0.3) -| (ns.north);
 \draw[edge] (mb.south) -- ++(0,-0.3) -- (qp.north);
