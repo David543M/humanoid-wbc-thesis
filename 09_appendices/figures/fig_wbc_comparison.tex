@@ -1,0 +1,100 @@
+% ============================================================
+% FIGURE: WBC Approaches Comparison Heatmap — Ch2, §2.7
+% Anchor: \input{figures/fig_wbc_comparison} in ch2_state_of_the_art.tex
+% Required packages: tikz, tikzlibrary{matrix,positioning}
+% Scores: 3=good (green), 2=partial (yellow), 1=poor (red/gray)
+% NOTE: scores are grounded in literature — see benchmark_metrics.md
+% ============================================================
+
+%% Color macros
+\colorlet{scorehi}{green!55!black}
+\colorlet{scoremed}{orange!70!black}
+\colorlet{scorelo}{red!60!black}
+\colorlet{scorena}{gray!45}
+\colorlet{rowhi}{blue!8}   % highlight row (proposed)
+\colorlet{rowhdr}{black!7} % header row
+
+\newcommand{\scoreH}{\textcolor{scorehi}{\textbf{\checkmark}}}
+\newcommand{\scoreM}{\textcolor{scoremed}{$\sim$}}
+\newcommand{\scoreL}{\textcolor{scorelo}{\texttimes}}
+\newcommand{\scoreNA}{\textcolor{scorena}{--}}
+
+\begin{tikzpicture}[font=\scriptsize]
+
+\def\rh{0.52}   % row height (cm)
+\def\cw{1.85}   % column width (cm) for score columns
+\def\rw{3.4}    % row label width (cm)
+
+%% Column headers (rotated 45°)
+\foreach \col/\lbl/\x in {
+  1/{Constraint\\satisfaction\\(hard)}/\rw,
+  2/{Computational\\cost (low)}/{\rw+\cw},
+  3/{Multi-contact\\support}/{\rw+2*\cw},
+  4/{Real-time\\(1 kHz)}/{\rw+3*\cw},
+  5/{Loco-manip.\\support}/{\rw+4*\cw},
+  6/{Evaluation\\protocol}/{\rw+5*\cw}
+}{
+  \node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+    at (\x cm + 0.1cm, \rh*8.3 cm) {\lbl};
+}
+
+%% Rows (bottom = row 1)
+% Format: {row_index}{label}{c1}{c2}{c3}{c4}{c5}{c6}{bg_color}
+\def\drawrow#1#2#3#4#5#6#7#8#9{
+  % Background
+  \fill[#9] (0, \rh*#1 cm) rectangle (\rw cm + 6*\cw cm, \rh*#1 cm + \rh cm);
+  % Label
+  \node[anchor=west, text width=\rw cm - 0.2cm, align=left, font=\scriptsize]
+    at (0.1cm, \rh*#1 cm + \rh/2 cm) {#2};
+  % Scores
+  \foreach \s/\xi in {#3/1, #4/2, #5/3, #6/4, #7/5, #8/6}{
+    \node[font=\small] at (\rw cm + (\xi-0.5)*\cw cm, \rh*#1 cm + \rh/2 cm) {\s};
+  }
+}
+
+%% Draw rows (index 1–7, bottom to top)
+\drawrow{1}{Null-Space / Task-Priority \\\cite{Sentis2005}}
+  {\scoreL}{\scoreH}{\scoreL}{\scoreH}{\scoreL}{\scoreL}{white}
+
+\drawrow{2}{QP-based WBC (single) \\\cite{Wensing2013}}
+  {\scoreH}{\scoreM}{\scoreM}{\scoreH}{\scoreM}{\scoreL}{white}
+
+\drawrow{3}{Hierarchical QP (HQP) \\\cite{EscandeMansard2014}}
+  {\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreM}{\scoreL}{black!4}
+
+\drawrow{4}{Linear centroidal MPC \\\cite{Winkler2018}}
+  {\scoreM}{\scoreH}{\scoreM}{\scoreM}{\scoreL}{\scoreL}{white}
+
+\drawrow{5}{Nonlinear centroidal MPC \\\cite{Caron2019}}
+  {\scoreH}{\scoreL}{\scoreH}{\scoreL}{\scoreM}{\scoreL}{black!4}
+
+\drawrow{6}{RL-based \textit{(baseline)} \\\cite{Kumar2021}}
+  {\scoreL}{\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreM}{gray!6}
+
+\drawrow{7}{\textbf{Proposed: MPC + QP-WBC}\\{\tiny(this thesis)}}
+  {\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreH}{\scoreH}{rowhi}
+
+%% Grid lines
+\draw[black!20, line width=0.4pt]
+  (0,0) rectangle (\rw cm + 6*\cw cm, 7*\rh cm);
+\foreach \i in {1,...,6}{
+  \draw[black!15, line width=0.3pt]
+    (0, \rh*\i cm) -- (\rw cm + 6*\cw cm, \rh*\i cm);
+}
+\draw[black!30, line width=0.7pt]
+  (\rw cm, 0) -- (\rw cm, 7*\rh cm);
+\foreach \j in {1,...,5}{
+  \draw[black!15, line width=0.3pt]
+    (\rw cm + \j*\cw cm, 0) -- (\rw cm + \j*\cw cm, 7*\rh cm);
+}
+%% Highlight border for proposed row
+\draw[blue!60!black, line width=1.2pt]
+  (0, 6*\rh cm) rectangle (\rw cm + 6*\cw cm, 7*\rh cm);
+
+%% Legend
+\node[anchor=west] at (0, -0.45cm)
+  {\scoreH~= satisfied / low / supported \quad
+   \scoreM~= partial \quad
+   \scoreL~= not satisfied / high / absent};
+
+\end{tikzpicture}

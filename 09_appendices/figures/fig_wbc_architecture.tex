@@ -1,0 +1,95 @@
+% ============================================================
+% FIGURE: WBC Planning/Execution Architecture — Ch2, §2.4
+% Anchor: \input{figures/fig_wbc_architecture} in ch2_state_of_the_art.tex
+% Required packages: tikz, tikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+% Width: ~8.5cm (single IEEE column compatible)
+% ============================================================
+\begin{tikzpicture}[
+  font=\small,
+  every node/.style={align=center},
+  % Block styles
+  io/.style={
+    rectangle, rounded corners=3pt,
+    draw=black!40, fill=black!5,
+    text width=6.5cm, minimum height=0.7cm,
+    font=\small
+  },
+  ctrl/.style={
+    rectangle, rounded corners=4pt,
+    draw=blue!70!black, fill=blue!8, line width=1pt,
+    text width=6.5cm, minimum height=1.2cm,
+    font=\small\bfseries
+  },
+  robot/.style={
+    rectangle, rounded corners=4pt,
+    draw=black!70, fill=black!10, line width=1pt,
+    text width=6.5cm, minimum height=1.0cm,
+    font=\small\bfseries
+  },
+  coupling/.style={
+    rectangle, rounded corners=3pt,
+    draw=orange!80!black, fill=orange!12, line width=1.2pt,
+    text width=6.5cm, minimum height=0.55cm,
+    font=\scriptsize\bfseries, text=orange!80!black
+  },
+  arrow/.style={-{Stealth[length=5pt,width=4pt]}, line width=1.2pt, draw=black!60},
+  arrowback/.style={-{Stealth[length=5pt,width=4pt]}, line width=1pt, draw=black!40, dashed},
+  label/.style={font=\scriptsize\itshape, text=black!55, fill=white, inner sep=1pt},
+]
+
+%% BLOCK 1 — TASK SPECIFICATION
+\node[io] (task) at (0, 0) {
+  \textbf{Task Specification}\\[1pt]
+  {\scriptsize Locomotion goals (footstep targets, CoM ref.) $\cdot$ Manipulation goals (end-effector ref.)}
+};
+
+%% ARROW down
+\draw[arrow] (task.south) -- ++(0,-0.5) node[midway, label] {Reference trajectories} -- ++(0,-0.1)
+  coordinate (a1);
+
+%% BLOCK 2 — CENTROIDAL MPC
+\node[ctrl, below=1.05cm of task] (mpc) {
+  Centroidal MPC Layer\\[2pt]
+  {\scriptsize Optimize CoM \& angular momentum over horizon $T$}\\
+  {\scriptsize 50--100\,Hz $\;\cdot\;$ Linear or nonlinear centroidal dynamics}\\
+  {\scriptsize \cite{Caron2019}, \cite{Winkler2018}, \cite{Elobaid2023}}
+};
+
+%% COUPLING INTERFACE
+\node[coupling, below=0.55cm of mpc] (coupling) {
+  $\longleftarrow$\quad COUPLING INTERFACE — thesis contribution\quad$\longrightarrow$
+};
+
+%% ARROW with coupling annotation
+\draw[arrow] (mpc.south) -- (coupling.north);
+\node[label, right=0.15cm of coupling, text=orange!80!black, font=\scriptsize\bfseries]
+  {wrench refs + contact schedule};
+
+%% BLOCK 3 — QP-BASED WBC
+\node[ctrl, below=0.55cm of coupling] (qp) {
+  QP-based WBC Layer\\[2pt]
+  {\scriptsize Minimize task tracking cost s.t. rigid-body dynamics,}\\
+  {\scriptsize joint limits, friction cone $\;\cdot\;$ 1\,kHz}\\
+  {\scriptsize Pinocchio + OSQP/Eiquadprog\quad \cite{Wensing2013}, \cite{Pinocchio2019}}
+};
+
+%% ARROW down
+\draw[arrow] (coupling.south) -- (qp.north);
+\draw[arrow] (qp.south) -- ++(0,-0.5) node[midway, label] {Joint torques $\boldsymbol{\tau}$} -- ++(0,-0.1)
+  coordinate (a2);
+
+%% BLOCK 4 — ROBOT
+\node[robot, below=1.0cm of qp] (robot) {
+  Humanoid Robot\\[2pt]
+  {\scriptsize IMU $\cdot$ joint encoders $\cdot$ F/T feet $\;\cdot\;$ Floating-base EKF state estimation}
+};
+
+\draw[arrow] (qp.south) -- (robot.north);
+
+%% FEEDBACK ARROW (right side)
+\draw[arrowback]
+  (robot.east) -- ++(0.8,0) -- ++(0, 7.3)
+  node[midway, label, rotate=90, yshift=4pt] {State feedback $\mathbf{q},\,\dot{\mathbf{q}}$, contacts}
+  -- (task.east);
+
+\end{tikzpicture}

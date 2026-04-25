@@ -74,3 +74,5 @@ desktop.ini
 *.env
 .env*
 secrets.py
+06_writing/chapters/versions/
+06_writing/chapters/chapter_02_state_of_the_art_draft.md
