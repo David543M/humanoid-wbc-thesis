@@ -1,0 +1,187 @@
+% ============================================================
+%  CHAPTER 3 — Methodology: WBC Framework Design
+%  Logical chain: Gap → Proposed Solution → Justification
+%  Status: Not started
+% ============================================================
+
+\chapter{Methodology}
+\label{chap:methodology}
+
+% Opening: restate the identified gap (§2.6) and announce the proposed
+% hierarchical framework. Do NOT redefine terms already defined in §2.
+
+\lipsum[14]
+
+% ─── 3.1 FRAMEWORK OVERVIEW ─────────────────────────────────
+\section{Framework Overview}
+\label{sec:framework-overview}
+
+% Describe the two-layer architecture:
+%   Layer 1: Centroidal MPC (planning, ~50–100 Hz)
+%   Layer 2: QP-based WBC (execution, ~1 kHz)
+% TODO: Insert architecture diagram (figures/framework_overview.pdf)
+
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=0.85\linewidth]{figures/framework_overview.pdf}
+  \fbox{\rule{0pt}{4cm}\rule{8cm}{0pt}}  % placeholder — replace with actual figure
+  \caption{Overview of the proposed hierarchical WBC framework. The centroidal
+           MPC planning layer generates reference trajectories at 1,kHz,
+           which are tracked by the QP-based WBC execution layer at 1,kHz.}
+  \label{fig:framework-overview}
+\end{figure}
+
+\lipsum[15]
+
+\begin{criticalinsight}
+  % TODO: Justify the two-layer split.
+  % Acknowledge the interface error risk (§6 Controversy 3 / Insight 1).
+\end{criticalinsight}
+
+% ─── 3.2 SYSTEM MODEL ───────────────────────────────────────
+\section{System Model}
+\label{sec:system-model}
+
+\subsection{Floating-Base Dynamics}
+\label{sec:floating-base}
+
+% CANONICAL NOTATION — defined here for the whole document.
+% All subsequent chapters MUST reuse these symbols without redefinition.
+
+The humanoid robot is modeled as a floating-base rigid multibody system with
+$n$ actuated joints. The generalized configuration is $\q = [\q_b\transpose,
+\q_j\transpose]\transpose \in \mathbb{R}^{6+n}$, where $\q_b \in SE(3)$ represents
+the unactuated base pose and $\q_j \in \mathbb{R}^{n}$ the joint coordinates.
+The equations of motion are:
+
+\begin{equation}
+  \M \ddq + \Cg = \bm{S}\transpose \torque + \Jc\transpose \fc
+  \label{eq:eom}
+\end{equation}
+
+\noindent where $\M \in \mathbb{R}^{(6+n)\times(6+n)}$ is the joint-space inertia matrix,
+$\Cg \in \mathbb{R}^{6+n}$ collects Coriolis, centrifugal and gravitational terms,
+$\bm{S} = [\bm{0}_{n\times 6}, \bm{I}_n]$ is the actuation selection matrix,
+$\torque \in \mathbb{R}^n$ is the joint torque vector, $\Jc$ is the contact
+Jacobian, and $\fc \in \mathbb{R}^{3k}$ is the contact wrench ($k$ contact points).
+
+\lipsum[16]
+
+\begin{criticalinsight}
+  % TODO: Discuss floating-base unactuability and its consequences for WBC.
+\end{criticalinsight}
+
+\subsection{Centroidal Dynamics}
+\label{sec:centroidal}
+
+% Reference: Orin & Goswami (2013) — centroidal is sufficient for planning.
+% Notation: \lmom (linear momentum), \amom (angular momentum), \com (CoM position).
+
+\begin{equation}
+  \begin{bmatrix} \dot{\lmom} \\ \dot{\amom} \end{bmatrix}
+  = \sum_{i} \begin{bmatrix} \bm{f}_{c,i} \\ \bm{r}_i \times \bm{f}_{c,i} \end{bmatrix}
+  + \begin{bmatrix} m\bm{g} \\ \bm{0} \end{bmatrix}
+  \label{eq:centroidal}
+\end{equation}
+
+\lipsum[17]
+
+% ─── 3.3 QP-BASED WBC FORMULATION ───────────────────────────
+\section{QP-Based WBC Formulation}
+\label{sec:qp-wbc}
+
+% Formalize the QP: decision variables, cost, constraints.
+% Decision vector: \zqp = [\ddq\transpose, \torque\transpose, \fc\transpose]\transpose
+
+\begin{equation}
+  \min_{\ddq,\, \torque,\, \fc} \;
+    \sum_{i} w_i \norm{\J_i \ddq + \dot{\J}_i \dq - \ddxtask_i^{\mathrm{ref}}}_{\bm{W}_i}^2
+  \label{eq:qp-cost}
+\end{equation}
+
+\noindent subject to:
+\begin{align}
+  \M\ddq + \Cg &= \bm{S}\transpose\torque + \Jc\transpose\fc
+    & &\text{(floating-base dynamics)} \label{eq:qp-dyn} \\
+  \Jc\ddq + \dot{\Jc}\dq &= \bm{0}
+    & &\text{(rigid contact)} \label{eq:qp-contact} \\
+  \torque_{\min} &\leq \torque \leq \torque_{\max}
+    & &\text{(torque limits)} \label{eq:qp-torque} \\
+  \fc &\in \mathcal{FC}
+    & &\text{(friction cone)} \label{eq:qp-friction}
+\end{align}
+
+% TODO: Discuss friction cone linearization (inner polyhedral approximation).
+% TODO: Discuss task hierarchy and weight tuning.
+
+\lipsum[18]
+
+\begin{criticalinsight}
+  % TODO: Address the QP infeasibility risk at contact transitions (§8.4 Risk).
+  % Soft constraint relaxation strategy must be described here.
+\end{criticalinsight}
+
+% ─── 3.4 CENTROIDAL MPC PLANNING LAYER ──────────────────────
+\section{Centroidal MPC Planning Layer}
+\label{sec:mpc-planning}
+
+% Reference: Caron (2020), Winkler/TOWR (2018)
+% Describe receding-horizon formulation, footstep planning, interface to WBC.
+
+\lipsum[19]
+
+\begin{criticalinsight}
+  % TODO: Quantify the interface error between MPC output and WBC input.
+\end{criticalinsight}
+
+% ─── 3.5 CONTACT MODELING ───────────────────────────────────
+\section{Contact Modeling and Mode Transitions}
+\label{sec:contact-modeling}
+
+% Key controversy (§6 Problem 1): rigid LCP vs. soft contact.
+% MUST justify choice here — dedicate explicit sub-section.
+% Tie to simulator choice (PQ2 — to be resolved).
+
+\subsection{Rigid Contact Model}
+\lipsum[20]
+
+\subsection{Soft Contact Model}
+\lipsum[21]
+
+\subsection{Contact Mode Transition Strategy}
+% Contact mode switching introduces hybrid dynamics discontinuities.
+% Describe how the WBC handles stance $\leftrightarrow$ swing transitions.
+\lipsum[22]
+
+\begin{criticalinsight}
+  % TODO: Explicitly justify the contact model choice.
+  % Recommend sensitivity analysis if time permits (§18 reviewer anticipation).
+\end{criticalinsight}
+
+% ─── 3.6 STATE ESTIMATION ───────────────────────────────────
+\section{State Estimation}
+\label{sec:state-estimation}
+
+% EKF on IMU + joint encoders for base pose/velocity (§3.3 of memory).
+% Key trade-off: speed vs. accuracy of base velocity — critical for WBC stability.
+
+\lipsum[23]
+
+\begin{criticalinsight}
+  % TODO: Discuss propagation of base velocity estimation error into the WBC.
+\end{criticalinsight}
+
+% ─── 3.7 TASK HIERARCHY AND PRIORITY ASSIGNMENT ─────────────
+\section{Task Hierarchy and Priority Assignment}
+\label{sec:task-hierarchy}
+
+% Define task stack: e.g., (1) contact stability, (2) CoM tracking,
+% (3) swing foot tracking, (4) end-effector / manipulation task,
+% (5) posture regularization.
+
+\lipsum[24]
+
+\begin{criticalinsight}
+  % TODO: Explain how manipulation tasks are integrated without triggering
+  % task-priority conflicts with locomotion tasks (§7.2 Methodological Gap).
+\end{criticalinsight}

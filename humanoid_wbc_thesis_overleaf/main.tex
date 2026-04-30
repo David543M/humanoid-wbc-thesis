@@ -1,0 +1,271 @@
+% ============================================================
+%  MASTER'S THESIS — Whole-Body Control for Humanoid Robots
+%  Overleaf Template  |  Author: David
+%  Last sync: master_memory.md §12 (Chapter structure)
+% ============================================================
+
+% book class provides \frontmatter, \mainmatter, \backmatter — required for thesis
+\documentclass[12pt, a4paper, twoside, openright]{book}
+
+% ─── ENCODING & FONTS ───────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}          % Better text justification
+
+% ─── PAGE GEOMETRY ──────────────────────────────────────────
+\usepackage[
+  top=25mm, bottom=25mm,
+  inner=30mm, outer=20mm,      % Extra inner margin for binding
+  headheight=25.3pt
+]{geometry}
+
+% ─── LANGUAGE ───────────────────────────────────────────────
+\usepackage[english]{babel}
+
+% ─── MATHS ──────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}          % dcases, coloneqq, etc.
+\usepackage{bm}                 % Bold math symbols (\bm{})
+% \usepackage{siunitx}            % SI units (1,kHz)
+
+% ─── GRAPHICS & FIGURES ─────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[dvipsnames]{xcolor}
+
+% ─── TIKZ / FIGURES ─────────────────────────────────────────
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{
+  shapes.geometric,
+  arrows.meta,
+  positioning,
+  fit,
+  backgrounds,
+  matrix,
+  decorations.pathreplacing,
+  calc
+}
+
+% ─── TABLES ─────────────────────────────────────────────────
+\usepackage{booktabs}           % Professional-quality tables
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+
+% ─── ALGORITHMS ─────────────────────────────────────────────
+% \usepackage{algorithm}
+% \usepackage{algpseudocode}
+% ForEach shorthand (algpseudocode must be loaded first)
+% \algnewcommand\algorithmicforeach{\textbf{for each}}
+% \algdef{S}[FOR]{ForEach}[1]{\algorithmicforeach\ #1\ \textbf{do}}
+
+% ─── CODE LISTINGS ──────────────────────────────────────────
+\usepackage{listings}
+% \usepackage{lstautogobble}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  commentstyle=\color{OliveGreen},
+  keywordstyle=\color{MidnightBlue}\bfseries,
+  stringstyle=\color{BrickRed},
+}
+
+% ─── BIBLIOGRAPHY (natbib + IEEE-style) ─────────────────────
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{IEEEtranN}
+
+% ─── HYPERLINKS ─────────────────────────────────────────────
+\usepackage[
+  colorlinks = true,
+  linkcolor  = MidnightBlue,
+  citecolor  = OliveGreen,
+  urlcolor   = BrickRed,
+  pdftitle   = {Development and Simulation of a Whole-Body Control Framework for a Humanoid Robot},
+  pdfauthor  = {David},
+]{hyperref}
+\usepackage[capitalise, noabbrev]{cleveref}  % \cref{}
+
+% ─── HEADER / FOOTER ────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\small\leftmark}
+\fancyhead[RO]{\small\rightmark}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── CHAPTER STYLE ──────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptertitlename\ \thechapter}{18pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{40pt}
+
+% ─── CUSTOM THEOREM ENVIRONMENTS ────────────────────────────
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{assumption}{Assumption}[chapter]
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[chapter]
+
+% Critical Insight box (required at end of each section — §17 rule 8)
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable, skins}
+\newtcolorbox{criticalinsight}{
+  title        = {Critical Insight},
+  colback      = gray!8,
+  colframe     = MidnightBlue!60,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+  left         = 6pt,
+  right        = 6pt,
+  top          = 4pt,
+  bottom       = 4pt,
+  before upper = \small,
+}
+
+% Hypothesis box
+\newtcolorbox{hypothesis}[1]{
+  title        = {Hypothesis #1},
+  colback      = OliveGreen!6,
+  colframe     = OliveGreen!50,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+}
+
+% Research Gap box
+\newtcolorbox{researchgap}{
+  title        = {Research Gap},
+  colback      = BrickRed!6,
+  colframe     = BrickRed!50,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+}
+
+% ─── CANONICAL NOTATION (§10 Key Definitions) ───────────────
+% State & dynamics
+\newcommand{\q}{\bm{q}}                  % Generalized coordinates
+\newcommand{\dq}{\dot{\bm{q}}}           % Generalized velocities
+\newcommand{\ddq}{\ddot{\bm{q}}}         % Generalized accelerations
+\newcommand{\torque}{\bm{\tau}}          % Joint torques
+\newcommand{\M}{\bm{M}(\q)}             % Inertia matrix
+\newcommand{\Mmat}{\bm{M}(\q)}          % Alias (safe in text-adjacent contexts)
+\newcommand{\Cg}{\bm{C}(\q,\dq)\dq + \bm{g}(\q)}  % Coriolis + gravity
+\newcommand{\J}{\bm{J}}                  % Jacobian matrix
+\newcommand{\Jmat}{\bm{J}}              % Alias (avoids clash with AMS \J)
+\newcommand{\Jc}{\bm{J}_c}              % Contact Jacobian
+\newcommand{\fc}{\bm{f}_c}              % Contact wrench (6D)
+\newcommand{\wrench}{\bm{w}}             % Generic wrench
+% CoM
+\newcommand{\com}{\ensuremath{\bm{p}_{\mathrm{CoM}}}} % Centre of Mass position
+\newcommand{\lmom}{\bm{l}}               % Linear momentum
+\newcommand{\amom}{\bm{k}}               % Angular momentum
+% Tasks
+\newcommand{\xtask}{\bm{x}}              % Task-space variable
+\newcommand{\dxtask}{\dot{\bm{x}}}
+\newcommand{\ddxtask}{\ddot{\bm{x}}}
+\newcommand{\xerr}{\bm{e}}               % Task-space error
+% QP
+\newcommand{\zqp}{\bm{z}}               % QP decision variable
+\newcommand{\Hqp}{\bm{H}}               % QP Hessian
+\newcommand{\cqp}{\bm{c}}               % QP linear term
+% Norms & operators
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\transpose}{^{\top}}
+% Abbreviations (first use expanded in each chapter)
+\newcommand{\WBC}{Whole-Body Control (WBC)}
+\newcommand{\QP}{Quadratic Program (QP)}
+\newcommand{\MPC}{Model Predictive Control (MPC)}
+\newcommand{\DOF}{Degrees of Freedom (DOF)}
+\newcommand{\CoM}{Center of Mass (CoM)}
+\newcommand{\EKF}{Extended Kalman Filter (EKF)}
+
+% ─── MISC UTILITIES ─────────────────────────────────────────
+\usepackage{lipsum}       % Placeholder text — remove before submission
+\usepackage{todonotes}    % \todo{} margin notes
+\usepackage{pdfpages}     % Include external PDFs (appendix)
+\usepackage{csquotes}     % \enquote{}
+\usepackage{enumitem}     % Fine-grained list control
+\setlist[itemize]{noitemsep, topsep=4pt}
+\setlist[enumerate]{noitemsep, topsep=4pt}
+
+% ─── ACRONYMS / GLOSSARY (optional, extend as needed) ───────
+\usepackage[acronym, toc]{glossaries}
+\makeglossaries
+\newacronym{wbc}{WBC}{Whole-Body Control}
+\newacronym{qp}{QP}{Quadratic Program}
+\newacronym{mpc}{MPC}{Model Predictive Control}
+\newacronym{com}{CoM}{Center of Mass}
+\newacronym{dof}{DOF}{Degrees of Freedom}
+\newacronym{ekf}{EKF}{Extended Kalman Filter}
+\newacronym{lcp}{LCP}{Linear Complementarity Problem}
+\newacronym{urdf}{URDF}{Unified Robot Description Format}
+\newacronym{rl}{RL}{Reinforcement Learning}
+\newacronym{lip}{LIP}{Linear Inverted Pendulum}
+\newacronym{sea}{SEA}{Series Elastic Actuator}
+\newacronym{imu}{IMU}{Inertial Measurement Unit}
+
+% ─── FRONT MATTER HELPERS ───────────────────────────────────
+\newcommand{\thesistitle}{Development and Simulation of a\\Whole-Body Control Framework\\for a Humanoid Robot}
+\newcommand{\thesissubtitle}{Master's Thesis in Robotics Engineering}
+\newcommand{\theauthor}{David}
+\newcommand{\thesupervisor}{[Supervisor Name]}
+\newcommand{\theinstitution}{[University / Department]}
+\newcommand{\theyear}{2026}
+
+% ============================================================
+\begin{document}
+
+% ─── FRONT MATTER ───────────────────────────────────────────
+\frontmatter                   % roman page numbering
+
+\include{frontmatter/titlepage}
+\include{frontmatter/abstract}
+\include{frontmatter/acknowledgements}
+
+\tableofcontents
+\listoffigures
+\listoftables
+% \listofalgorithms
+
+\printglossary[type=\acronymtype, title=List of Acronyms]
+
+\mainmatter                    % arabic page numbering
+
+% ─── CHAPTERS ───────────────────────────────────────────────
+\include{chapters/ch1_introduction}
+\include{chapters/ch2_state_of_the_art}
+\include{chapters/ch3_methodology}
+\include{chapters/ch4_simulation_framework}
+\include{chapters/ch5_experiments}
+\include{chapters/ch6_discussion}
+\include{chapters/ch7_conclusion}
+
+% ─── BACK MATTER ────────────────────────────────────────────
+\backmatter
+
+% Bibliography
+\bibliography{references}
+
+% Appendices (optional — uncomment and add content when needed)
+% \appendix
+% \include{appendices/app_notation}
+% \include{appendices/app_proofs}
+
+\end{document}�

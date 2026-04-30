@@ -1,0 +1,123 @@
+% ============================================================
+%  CHAPTER 1 — Introduction
+%  Logical chain: Problem → Gap → Proposed Solution
+%  Status: Not started
+% ============================================================
+
+\chapter{Introduction}
+\label{chap:introduction}
+
+% ─── 1.1 MOTIVATION ─────────────────────────────────────────
+\section{Motivation}
+\label{sec:motivation}
+
+% TODO: Motivate WBC for humanoid robots.
+% Argue: Why does humanoid whole-body coordination matter?
+% Reference: service robotics, industrial assistance contexts.
+% Cite key humanoid platforms (Atlas, TALOS, Unitree H1/G1).
+
+\lipsum[2]
+
+\begin{criticalinsight}
+  % TODO: Identify the core tension that makes this problem hard.
+  % e.g., The gap between kinematic redundancy and real-time constraint satisfaction.
+\end{criticalinsight}
+
+% ─── 1.2 PROBLEM STATEMENT ──────────────────────────────────
+\section{Problem Statement}
+\label{sec:problem}
+
+% TODO: Formalize the research problem.
+% Be precise: what specific limitation in existing WBC frameworks motivates this work?
+% Anchor to: absence of a standard framework coupling planning + QP WBC for
+% simultaneous loco-manipulation (master_memory §7.2 — Methodological Gap).
+
+\lipsum[3]
+
+\begin{criticalinsight}
+  % TODO: State the falsifiable core claim.
+\end{criticalinsight}
+
+% ─── 1.3 RESEARCH QUESTION ──────────────────────────────────
+\section{Research Question and Objectives}
+\label{sec:research-question}
+
+% Canonical research question (master_memory §1.2):
+\begin{quote}
+  \textit{``How can a \WBC{} framework be designed and validated in simulation
+  to enable a humanoid robot to perform stable, multi-contact locomotion and
+  manipulation tasks under dynamic constraints?''}
+\end{quote}
+
+% TODO: Refine once formally agreed with supervisor (PQ4).
+
+\noindent The following sub-questions structure the investigation:
+\begin{enumerate}[label=\textbf{SQ\arabic*}]
+  \item What are the key limitations of existing WBC formulations (task-priority,
+        QP-based, MPC) when applied to full-body humanoid coordination?
+  \item How can contact dynamics be modeled and integrated in a simulation
+        environment to faithfully replicate hardware behavior?
+  \item What metrics and scenarios constitute a rigorous simulation-based
+        validation of a WBC framework for humanoids?
+\end{enumerate}
+
+% ─── 1.4 HYPOTHESES ─────────────────────────────────────────
+\section{Hypotheses}
+\label{sec:hypotheses}
+
+\begin{hypothesis}{H1}
+  A hierarchical \QP{}-based \WBC{} formulation can achieve stable whole-body
+  coordination across locomotion and manipulation tasks simultaneously.
+\end{hypothesis}
+
+\begin{hypothesis}{H2}
+  Simulation-based validation (Isaac Sim / MuJoCo) is sufficient to demonstrate
+  proof-of-concept for the proposed WBC framework before hardware deployment.
+\end{hypothesis}
+
+\begin{hypothesis}{H3}
+  Explicit contact modeling and task-priority hierarchies outperform naive
+  torque control in multi-contact transitions.
+\end{hypothesis}
+
+% ─── 1.5 SCOPE AND LIMITATIONS ──────────────────────────────
+\section{Scope and Limitations}
+\label{sec:scope}
+
+% TODO: Summarise the in-scope / out-of-scope table (master_memory §1.5).
+% Explicitly exclude: hardware experiments, wheeled robots, end-to-end RL as
+% primary contribution (master_memory §11 — Rejected Approaches).
+
+\lipsum[4]
+
+% ─── 1.6 CONTRIBUTIONS ──────────────────────────────────────
+\section{Contributions}
+\label{sec:contributions}
+
+% TODO: Clearly delineate novelty vs. Crocoddyl / existing WBC stacks (PQ4).
+% Candidate contributions:
+%  (1) Novel hierarchical coupling of centroidal MPC + QP execution for
+%      simultaneous loco-manipulation.
+%  (2) Reproducible simulation-based evaluation protocol addressing the
+%      evaluation gap (master_memory §7.3).
+%  (3) Comparative benchmark of WBC, task-priority, and RL baselines on
+%      standardized S1–S5 scenarios.
+
+\lipsum[5]
+
+% ─── 1.7 THESIS STRUCTURE ───────────────────────────────────
+\section{Thesis Structure}
+\label{sec:structure}
+
+The remainder of this thesis is organized as follows.
+\Cref{chap:sota} reviews the state of the art in whole-body control for humanoid
+robots, covering model-based methods, centroidal MPC, and learning-based baselines.
+\Cref{chap:methodology} formalizes the proposed WBC framework and justifies the
+design choices.
+\Cref{chap:simulation} describes the simulation environment, robot model, and
+software stack.
+\Cref{chap:experiments} presents quantitative results across evaluation scenarios
+S1 through S5.
+\Cref{chap:discussion} interprets the results and discusses limitations.
+\Cref{chap:conclusion} summarizes contributions and outlines future research
+directions.

@@ -1,0 +1,111 @@
+% ============================================================
+% FIGURE: WBC Approaches Comparison Heatmap — Ch2, §2.7
+% Anchor: \input{figures/fig_wbc_comparison} in ch2_state_of_the_art.tex
+% Required packages: tikz, xcolor
+% Scores: \scoreH=good, \scoreM=partial, \scoreL=poor
+% NOTE: scores grounded in literature — see benchmark_metrics.md
+% FIX (2026-04): rewrote all TikZ arithmetic with pgfmathsetmacro +
+%   explicit coordinate values to eliminate '{expr}cm' parse errors.
+% Layout constants: rh=0.52cm, cw=1.85cm, rw=3.4cm, totalW=14.5cm
+% ============================================================
+
+%% Color definitions
+\colorlet{scorehi}{green!55!black}
+\colorlet{scoremed}{orange!70!black}
+\colorlet{scorelo}{red!60!black}
+\colorlet{scorena}{gray!45}
+\colorlet{rowhi}{blue!8}
+\colorlet{rowhdr}{black!7}
+
+%% Score symbols
+\newcommand{\scoreH}{\textcolor{scorehi}{\textbf{\checkmark}}}
+\newcommand{\scoreM}{\textcolor{scoremed}{$\sim$}}
+\newcommand{\scoreL}{\textcolor{scorelo}{\texttimes}}
+\newcommand{\scoreNA}{\textcolor{scorena}{--}}
+
+\begin{tikzpicture}[font=\scriptsize]
+
+%% ─── Column headers (rotated 40°) ───────────────────────────────────────────
+%% x = rw + (col-1)*cw + 0.1  →  3.50, 5.35, 7.20, 9.05, 10.90, 12.75 cm
+%% y = rh*8.3 = 0.52*8.3 = 4.316 cm
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (3.50cm, 4.316cm) {Constraint\\satisfaction\\(hard)};
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (5.35cm, 4.316cm) {Computational\\cost (low)};
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (7.20cm, 4.316cm) {Multi-contact\\support};
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (9.05cm, 4.316cm) {Real-time\\(1\,kHz)};
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (10.90cm, 4.316cm) {Loco-manip.\\support};
+\node[rotate=40, anchor=south west, font=\scriptsize, align=left]
+  at (12.75cm, 4.316cm) {Evaluation\\protocol};
+
+%% ─── Row macro ───────────────────────────────────────────────────────────────
+%% Args: {row_index}{label}{c1}{c2}{c3}{c4}{c5}{c6}{bg_color}
+%%   row_index: 1 = bottom row, 7 = top row
+%%   y_bottom = (index-1)*0.52 cm,  y_top = index*0.52 cm
+%%   y_center = index*0.52 - 0.26 cm
+%%   Score col x-centers: 4.325, 6.175, 8.025, 9.875, 11.725, 13.575 cm
+\def\drawrow#1#2#3#4#5#6#7#8#9{%
+  \pgfmathsetmacro{\ybot}{0.52*(#1-1)}%
+  \pgfmathsetmacro{\ytop}{0.52*#1}%
+  \pgfmathsetmacro{\ycen}{0.52*#1-0.26}%
+  \fill[#9] (0cm, \ybot cm) rectangle (14.5cm, \ytop cm);
+  \node[anchor=west, text width=3.2cm, align=left, font=\scriptsize]
+    at (0.1cm, \ycen cm) {#2};
+  \node[font=\small] at (4.325cm,  \ycen cm) {#3};
+  \node[font=\small] at (6.175cm,  \ycen cm) {#4};
+  \node[font=\small] at (8.025cm,  \ycen cm) {#5};
+  \node[font=\small] at (9.875cm,  \ycen cm) {#6};
+  \node[font=\small] at (11.725cm, \ycen cm) {#7};
+  \node[font=\small] at (13.575cm, \ycen cm) {#8};
+}
+
+%% ─── Draw rows (1 = bottom → 7 = top) ───────────────────────────────────────
+\drawrow{1}{Null-Space / Task-Priority \\\cite{Sentis2005}}
+  {\scoreL}{\scoreH}{\scoreL}{\scoreH}{\scoreL}{\scoreL}{white}
+
+\drawrow{2}{QP-based WBC (single) \\\cite{Wensing2013}}
+  {\scoreH}{\scoreM}{\scoreM}{\scoreH}{\scoreM}{\scoreL}{white}
+
+\drawrow{3}{Hierarchical QP (HQP) \\\cite{EscandeMansard2014}}
+  {\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreM}{\scoreL}{black!4}
+
+\drawrow{4}{Linear centroidal MPC \\\cite{Winkler2018}}
+  {\scoreM}{\scoreH}{\scoreM}{\scoreM}{\scoreL}{\scoreL}{white}
+
+\drawrow{5}{Nonlinear centroidal MPC \\\cite{Caron2019}}
+  {\scoreH}{\scoreL}{\scoreH}{\scoreL}{\scoreM}{\scoreL}{black!4}
+
+\drawrow{6}{RL-based \textit{(baseline)} \\\cite{Kumar2021}}
+  {\scoreL}{\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreM}{gray!6}
+
+\drawrow{7}{\textbf{Proposed: MPC + QP-WBC}\\{\tiny(this thesis)}}
+  {\scoreH}{\scoreM}{\scoreH}{\scoreH}{\scoreH}{\scoreH}{rowhi}
+
+%% ─── Grid lines (all explicit values — no TikZ arithmetic) ──────────────────
+%% Outer border
+\draw[black!20, line width=0.4pt] (0cm, 0cm) rectangle (14.5cm, 3.64cm);
+%% Horizontal row separators at y = k*0.52 for k=1..6
+\foreach \yi in {0.52, 1.04, 1.56, 2.08, 2.60, 3.12}{
+  \draw[black!15, line width=0.3pt] (0cm, \yi cm) -- (14.5cm, \yi cm);
+}
+%% Label / score separator
+\draw[black!30, line width=0.7pt] (3.4cm, 0cm) -- (3.4cm, 3.64cm);
+%% Vertical column separators at x = rw + j*cw for j=1..5
+\foreach \xi in {5.25, 7.10, 8.95, 10.80, 12.65}{
+  \draw[black!15, line width=0.3pt] (\xi cm, 0cm) -- (\xi cm, 3.64cm);
+}
+
+%% ─── Highlight border for proposed row (row 7: y = 3.12 → 3.64 cm) ─────────
+\draw[blue!60!black, line width=1.2pt]
+  (0cm, 3.12cm) rectangle (14.5cm, 3.64cm);
+
+%% ─── Legend ──────────────────────────────────────────────────────────────────
+\node[anchor=west] at (0cm, -0.45cm)
+  {\scoreH~= satisfied / low / supported \quad
+   \scoreM~= partial \quad
+   \scoreL~= not satisfied / high / absent};
+
+\end{tikzpicture}

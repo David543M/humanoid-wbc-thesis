@@ -1,0 +1,573 @@
+% ============================================================
+%  CHAPTER 2 --- State of the Art: Whole-Body Control for Humanoids
+%  Source: 06_writing/chapters/chapter_02_state_of_the_art_draft.md (2026-04-23)
+%  LaTeX conversion: 2026-04-24
+%  Logical chain (master_memory §13):
+%    Problem --- Gap --- Proposed Solution --- Validation --- Contribution.
+%  Style enforcement: master_memory §17
+%    - Whole-Body Control hyphenated; humanoid robot; cite every claim;
+%    - No "clearly", "obviously", "simply";
+%    - mini Critical Insight at the end of every section.
+% ============================================================
+
+\chapter{State of the Art: Whole-Body Control for Humanoid Robots}
+\label{chap:sota}
+
+\section*{Chapter Outline}
+
+This chapter synthesises the model-based \WBC{} literature for humanoid
+robots under three framing constraints inherited from the thesis master
+memory. First, the review prioritises peer-reviewed contributions from
+IEEE, Springer, and Elsevier venues, supplemented by recent (post-2022)
+preprints when they fill identifiable gaps. Second, the taxonomy is
+preserved across the chapter: methods are grouped as task-priority /
+null-space, QP-based, MPC-based, and (as baseline reference) learning-based.
+Third, the chapter terminates with an explicit positioning of the proposed
+thesis contribution against the canvassed body of work, in line with the
+mandated logical flow.
+
+The chapter is therefore not a chronological catalogue but an
+\emph{argument}: the dominant architectural pattern (planning layer plus
+execution layer) is well-established but underspecified at the coupling
+interface, and the absence of a standardised evaluation protocol for
+simultaneous loco-manipulation constitutes a credible target for a
+master's-level contribution.
+
+\begin{criticalinsight}
+The structural choice to organise the chapter around an argument rather
+than a method-by-method survey carries a methodological cost: it requires
+the reader to accept the taxonomy as load-bearing before the evidence is
+presented. This risk is mitigated by reserving Section~\ref{sec:sota_synthesis}
+for the synthesis and by explicitly flagging, throughout, where method
+boundaries blur (e.g.\ between QP-WBC and MPC at the centroidal level).
+A reviewer may legitimately object that the taxonomy elides hybrid
+model-learning approaches; this chapter treats those as out of scope per
+the thesis scope statement, while Section~\ref{sec:sota_rl} acknowledges them
+as a reference baseline.
+\end{criticalinsight}
+
+
+% --- 2.1 FOUNDATIONS ---------------------------------------
+\section{Foundations of Whole-Body Control}
+\label{sec:sota_foundations}
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{\input{figures/fig_wbc_taxonomy}}
+  \caption{Taxonomy of Whole-Body Control (WBC) approaches for humanoid robots.
+           Model-based methods (blue) are the primary focus of this chapter;
+           learning-based approaches (grey) are retained as baseline references only
+           (see Section~\ref{sec:sota_rl}).
+           Representative works are indicated in brackets.}
+  \label{fig:wbc_taxonomy}
+\end{figure}
+
+\WBC{} emerged at the intersection of operational-space control
+\cite{Khatib1987} and floating-base rigid-body dynamics, motivated by the
+recognition that a humanoid robot's degrees of freedom cannot be
+commanded independently without violating either dynamic feasibility or
+contact-stability constraints \cite{Sentis2005}. The defining problem WBC
+addresses is the \emph{simultaneous coordination of a high-DOF system}
+(typically $28$--$32$ DOF for humanoids: torso, arms, and legs) under a
+hierarchy of behavioural objectives, while respecting the physical
+constraints imposed by joint limits, actuator torque saturation, and
+unilateral contact wrenches \cite{Sentis2005,Wensing2013}.
+
+The canonical formulation considers a humanoid as a \emph{floating-base}
+system: six unactuated degrees of freedom describe the base pose relative
+to an inertial frame, augmented by $n$ actuated joint variables. The
+governing equation of motion takes the standard form
+\begin{equation}
+  \M\,\ddq + \Cg = \bm{S}\transpose\,\torque + \Jc\transpose\,\fc
+  \label{eq:eom_floating_base}
+\end{equation}
+where $\M$ denotes the mass matrix, $\Cg$ collects the Coriolis,
+centrifugal, and gravity terms, $\bm{S}$ is the actuation selection
+matrix, $\torque$ collects the actuated joint torques, and
+$(\Jc,\fc)$ are the contact Jacobian and the stacked contact wrench
+respectively \cite{Sentis2005,Wensing2013,Koolen2016}. WBC frameworks
+differ primarily in \emph{how} they reconcile multiple, potentially
+conflicting task objectives over \eqref{eq:eom_floating_base} while
+ensuring that $\fc$ lies inside the friction cone.
+
+Three foundational design choices have shaped the field. The first is
+the choice of \emph{control level}: kinematic (velocity),
+inverse-dynamic (acceleration), or torque. Torque-level WBC, although
+computationally heavier, is generally regarded as the most expressive
+level for handling contact-rich behaviours \cite{Wensing2013}. The
+second is the choice of \emph{task representation}: end-effector
+position, momentum, centroidal quantities, or arbitrary task-space
+coordinates \cite{Koolen2016}. The third is \emph{how priorities
+between tasks are enforced} --- through null-space projection
+(Section~\ref{sec:sota_nullspace}), through weighted optimisation
+(Section~\ref{sec:sota_qp}), or through hierarchical optimisation with
+strict priorities in Hierarchical \QP{} form
+\cite{Sentis2005,Wensing2013,Koolen2016,EscandeMansard2014}.
+
+\begin{criticalinsight}
+The foundational WBC formulation already exposes the central trade-off
+that recurs throughout the literature: \emph{constraint satisfaction}
+versus \emph{computational tractability}. Torque-level WBC with hard
+friction-cone constraints is mathematically rigorous but compute-intensive;
+kinematic-level WBC with weighted priorities is fast but elides the
+contact physics. The thesis's choice to operate at QP-torque level inherits
+the former trade-off and must justify the additional cost in
+Chapter~\ref{chap:sota}'s successor: a justification that rests on the
+rigorous constraint handling that later sections will document.
+\end{criticalinsight}
+
+
+% --- 2.2 TASK-PRIORITY AND NULL-SPACE METHODS --------------
+\section{Task-Priority and Null-Space Methods}
+\label{sec:sota_nullspace}
+
+The earliest \WBC{} formulation that generalised cleanly to floating-base
+humanoids is the task-priority null-space approach introduced by
+Sentis and Khatib \cite{Sentis2005}. Their hierarchical control of
+behavioural primitives expresses each task as a desired acceleration in
+a chosen task space; lower-priority tasks are projected into the null
+space of the higher-priority Jacobians $\J$, ensuring that they are
+executed \emph{only insofar as they do not perturb} higher-priority
+objectives. This formulation has the appealing property of \emph{strict}
+hierarchy: the priority ordering is enforced exactly, not approximately.
+
+Subsequent work refined this framework along three axes. The first axis
+is \emph{smoothness at task transitions}, where pseudo-inverse switching
+can produce velocity discontinuities --- addressed by continuous
+null-space projectors \cite{Sentis2005}. The second is the \emph{handling
+of singularities}, where Jacobian rank deficiencies require regularisation
+or task reactivation strategies. The third is the \emph{integration of
+inequality constraints}: classical null-space methods natively handle
+equality constraints (e.g.\ desired task accelerations) but offer no
+clean mechanism for inequality constraints such as friction cones, joint
+limits, or torque bounds \cite{Wensing2013}.
+
+Empirically, null-space WBC has been demonstrated on humanoid systems
+including the original DLR-Justin and a range of simulated platforms,
+achieving task hierarchies of moderate depth (typically three to five
+priority levels) \cite{Sentis2005}. Its computational cost is
+favourable --- projector chains can be evaluated in milliseconds for
+high-DOF systems --- but the absence of an inequality-constraint
+mechanism is broadly recognised as a fundamental limitation when contact
+stability or torque limits become binding \cite{Wensing2013,Koolen2016}.
+
+\begin{criticalinsight}
+Null-space WBC is best understood as an \emph{expressive but partial}
+solution: it answers the question ``how do I order tasks?'' rigorously,
+but cannot answer ``how do I respect physical bounds while doing so?''
+without auxiliary mechanisms. The QP-based reformulation discussed in
+Section~\ref{sec:sota_qp} emerged precisely to absorb both questions into
+a single optimisation problem. A reviewer might argue, fairly, that
+null-space methods are not obsolete --- they remain attractive when
+constraints are slack and compute is at a premium --- but the debate is
+context-dependent and unresolved. The thesis takes a principled position
+toward QP-WBC while refraining from dismissing null-space methods
+uncritically.
+\end{criticalinsight}
+
+
+% --- 2.3 QP-BASED WHOLE-BODY CONTROL -----------------------
+\section{QP-based Whole-Body Control Formulations}
+\label{sec:sota_qp}
+
+The \QP{} formulation reframes the \WBC{} problem as a constrained
+optimisation solved at every control cycle \cite{Wensing2013}. Decision
+variables typically include joint accelerations $\ddq$, contact wrenches
+$\fc$, and (optionally) torques $\torque$; the cost function is a
+weighted sum of task tracking errors, commonly expressed through norms
+$\norm{\bm{e}}$ over task-space error signals; and the constraints
+encode the rigid-body dynamics \eqref{eq:eom_floating_base}, joint and
+torque limits, and contact-friction conditions
+\cite{Wensing2013,Koolen2016}. The first contribution to formalise this
+approach with simultaneous satisfaction of ZMP and friction constraints
+at all priority levels was Wensing and Orin's 2013 paper on conic
+optimisation for dynamic humanoid behaviours \cite{Wensing2013}, which
+demonstrated dynamic kicks and jumps on a 26-DOF simulated humanoid with
+a roughly 2$\times$ computational speed-up over prior task-space methods.
+
+Three subsequent lines of work consolidated QP-WBC as the model-based
+standard. First, \emph{momentum-based formulations} \cite{Koolen2016}
+reframed the cost around centroidal momentum tracking and were deployed
+on the Atlas humanoid at the DARPA Robotics Challenge, with foot-placement
+errors reported up to $5$~cm during rough-terrain walking \cite{Koolen2016}.
+Second, \emph{Hierarchical QP (HQP)} formulations introduced strict
+priorities into the QP cost, generalising the null-space approach of
+Section~\ref{sec:sota_nullspace} to inequality-constrained settings
+\cite{EscandeMansard2014}. Third, whole-body admittance control with
+\QP{} wrench distribution extended QP-WBC to industrial multi-contact
+tasks such as stair climbing on the HRP-4 platform \cite{Caron2019}.
+
+Recent post-2022 work has sharpened the focus on \emph{computational
+robustness and real-time contact discovery}. Contact-implicit \MPC{} formulations
+\cite{LeCleach2024,Kim2025CI} eliminate the need for pre-defined contact
+mode sequences by solving directly over contact decision variables, enabling
+real-time multi-contact discovery. Smaldone et al.\
+\cite{Smaldone2025} show that explicit attention to the compute budget
+at the planner/WBC interface yields robust dynamic walking. Across these
+works, QP solve times remain in the \emph{sub-millisecond regime} when
+implemented with tuned solvers such as Eiquadprog or PROXQP \cite{DelPrete2016,Wensing2023Review}.
+
+A key methodological observation is that \emph{friction-cone compliance}
+in QP-WBC is rarely reported as a percentage in the literature, because
+the QP enforces it as a hard inequality constraint: violations correspond
+to solver infeasibility events, not to gradual non-compliance. This
+observation is revisited in Section~\ref{sec:sota_synthesis}.
+
+\begin{criticalinsight}
+QP-WBC is the field's mature technical answer to the multi-task,
+multi-constraint problem, but its maturity hides a measurement problem:
+most papers report constraint \emph{satisfaction} qualitatively (the QP
+was feasible) rather than quantitatively (what fraction of cycles, under
+what perturbation budget). The post-2022 literature has begun to expose
+this gap \cite{LeCleach2024,Smaldone2025} but has not yet converged on a
+reporting protocol --- a gap Section~\ref{sec:sota_synthesis} will argue
+the thesis can credibly target. A second insight is that the boundary
+between QP-WBC and MPC is increasingly porous: at the centroidal level,
+the same dynamics is being optimised in both, just over different
+horizons. This blurring is the subject of Section~\ref{sec:sota_mpc}.
+\end{criticalinsight}
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{\input{figures/fig_wbc_timeline}}
+  \caption{Timeline of key contributions to model-based Whole-Body Control
+           for humanoid robots (2005--2026). Foundational works are shown in
+           bold. Learning-based milestones (grey, below the axis) are included
+           for context only. The proposed thesis contribution is indicated at 2026.}
+  \label{fig:wbc_timeline}
+\end{figure}
+
+% --- 2.4 MODEL PREDICTIVE CONTROL --------------------------
+\section{Model Predictive Control for Humanoid Locomotion}
+\label{sec:sota_mpc}
+
+\begin{figure}[htbp]
+  \centering
+  \input{figures/fig_wbc_architecture}
+  \caption{Hierarchical planning/execution architecture for model-based humanoid
+           Whole-Body Control. The centroidal MPC layer generates wrench references
+           and a contact schedule at 50--100\,Hz; the QP-based WBC layer distributes
+           these to joint torques at 1\,kHz. The coupling interface (orange) is the
+           underdocumented boundary identified as a methodological gap in the
+           literature and constitutes a primary contribution of this thesis.}
+  \label{fig:wbc_architecture}
+\end{figure}
+
+\MPC{} addresses a complementary problem to \QP-based \WBC: instead of
+solving an instantaneous tracking optimisation at each cycle, MPC solves
+a finite-horizon optimal control problem over a predicted trajectory
+\cite{Wensing2023Review}. For humanoid locomotion, MPC is dominantly
+applied at the \emph{centroidal} level --- optimising \com{} and
+angular-momentum trajectories under contact constraints
+\cite{Caron2019,Romualdi2023,Elobaid2023} --- because full-body MPC at
+high frequency is computationally intractable.
+
+Three architectures dominate the post-2022 literature. The first is the
+\emph{linear / linearised centroidal MPC} lineage descended from the
+Linear Inverted Pendulum Model, which preserves real-time feasibility
+(under $10$~ms per solve) at the cost of accuracy in highly dynamic
+regimes \cite{Pajon2022}. The second is \emph{non-linear centroidal MPC},
+exemplified by Romualdi et al.\ \cite{Romualdi2023} and Elobaid et al.\
+\cite{Elobaid2023}, which retains full centroidal non-linearity at the
+cost of solve times in the $50$--$70$~ms range on the iCub3 platform
+\cite{Elobaid2023}. The third is \emph{trajectory optimisation with
+phase-based parameterisation} \cite{Winkler2018}, which absorbs gait
+sequencing into the optimisation itself by treating step timings and
+footholds as decision variables --- a structural innovation subsequently
+adopted in step-adjustment-aware MPC \cite{Romualdi2023}.
+
+A separate trajectory-optimisation tradition uses \emph{multi-shooting}
+and DDP-class algorithms over the full-body dynamics. Crocoddyl
+\cite{Crocoddyl} is the reference implementation, supporting
+Feasibility-driven Differential Dynamic Programming (FDDP) over
+multi-contact problems and computing dynamic manoeuvres (jumps,
+front-flips) within milliseconds. Crocoddyl is built on Pinocchio's
+analytical-derivative dynamics \cite{Pinocchio}, which evaluates
+legged-robot dynamics in approximately $3~\mu$s and is the de facto
+industry standard.
+
+The interface between MPC (planning layer) and QP-WBC (execution layer)
+is the \emph{unresolved} element of this literature. The post-2022 sweep
+confirms it remains open: Sleiman et al.\ \cite{Sleiman2021}, Romualdi et al.\
+\cite{Romualdi2023}, and Smaldone et al.\ \cite{Smaldone2025} each propose
+plausible coupling architectures using mutually incompatible terminology.
+
+\begin{criticalinsight}
+MPC and QP-WBC are not competing methods but layered ones, and the more
+useful question is not ``MPC or WBC?'' but ``what is the right interface
+between them?'' The current literature offers at least three answers ---
+sequential time-scale separation \cite{Romualdi2023}, unified multi-contact
+optimal control \cite{Sleiman2021}, and contact-implicit \MPC{} with
+automatic mode discovery \cite{LeCleach2024} --- but no consensus. This is the precise methodological
+territory the thesis enters in its proposed methodology chapter;
+Section~\ref{sec:sota_synthesis} will argue that \emph{naming and unifying}
+this design space, even before innovating within it, is a defensible
+Chapter~\ref{chap:sota} contribution.
+\end{criticalinsight}
+
+
+% --- 2.5 LEARNING-BASED APPROACHES (BASELINE) --------------
+\section{Learning-based Approaches}
+\label{sec:sota_rl}
+
+Reinforcement Learning (RL) approaches to humanoid \WBC{} have advanced
+rapidly since 2022 but are treated in this thesis as a \emph{baseline for
+comparison} rather than a contribution axis. This positioning is required
+by the thesis scope but also aligns with three substantive observations
+from the literature.
+
+First, RL-based WBC has demonstrated impressive \emph{agility}:
+end-to-end learned policies on Cassie and Unitree H1 achieve dynamic
+walking, recovery from large perturbations, and sim-to-real transfer
+with domain randomisation
+\cite{Radosavovic2024,HumanoidGym2024,PolySim2025}. Second, however, RL
+approaches generally \emph{forfeit interpretability and constraint
+guarantees}: they cannot enforce hard friction-cone or torque-saturation
+constraints by construction, only encourage compliance through reward
+shaping. Third, the evaluation reporting in the RL literature is markedly
+more quantitative than in the model-based literature: HumanoidBench
+\cite{Sferrazza2024} reports 27-task success rates on Unitree H1, and
+PolySim reports a $+52.8\%$ sim-to-MuJoCo motion-tracking improvement
+under multi-simulator domain randomisation \cite{PolySim2025}.
+
+A growing class of \emph{hybrid model-learning} approaches ---
+contact-implicit \MPC{} with learned warm-starting \cite{LeCleach2024},
+residual action learning to bridge the sim-to-real gap for whole-body skills
+\cite{ASAP2025}, and real-world RL-based loco-manipulation \cite{Radosavovic2024}
+--- sits between the two camps. These works are outside the thesis scope but are
+noted here as evidence that the model-based / learning-based distinction is
+itself becoming porous.
+
+The thesis adopts a pre-trained RL policy (e.g.\ for Unitree H1
+locomotion) as an \emph{upper-bound reference} baseline, against which
+the proposed QP-WBC framework is compared on the metrics defined in the
+thesis's benchmark-metrics specification.
+
+\begin{criticalinsight}
+The decision to scope RL out of the contribution but in to the baselines
+is methodologically coherent but epistemically uncomfortable: if RL
+outperforms the proposed WBC on every metric, the thesis must defend its
+design goals (constraint guarantees, interpretability) explicitly rather
+than performance-numerically. The response --- \emph{RL trades constraints
+for agility, different design goals} --- is sustainable but must be
+reinforced by demonstrating a \emph{qualitative} advantage of the WBC
+framework, not merely a quantitative one.
+Section~\ref{sec:sota_synthesis} returns to this point.
+\end{criticalinsight}
+
+
+% --- 2.6 SIMULATION PLATFORMS IN THE WBC LITERATURE --------
+\section{Simulation Platforms in the WBC Literature}
+\label{sec:sota_sim}
+
+Simulation choice is non-incidental for a simulation-only thesis: it
+determines what physical behaviours are reproducible and what claims are
+defensible. The literature converges on four primary platforms.
+
+\emph{Pinocchio} \cite{Pinocchio} is the dominant rigid-body dynamics
+library: it provides RBDL-class forward and inverse dynamics with
+analytical derivatives, evaluating in approximately $3~\mu$s per call on
+legged systems. It is the backbone of Stack-of-Tasks and Crocoddyl
+\cite{Crocoddyl} and is the de facto standard for \QP-\WBC{}
+implementations.
+
+\emph{Crocoddyl} \cite{Crocoddyl} extends Pinocchio for trajectory
+optimisation under contact sequences, with Feasibility-driven DDP as its
+solver innovation. Crocoddyl is positioned as the reference toolchain
+for full-body MPC.
+
+\emph{MuJoCo} \cite{MuJoCo2012} is widely used for contact-rich humanoid
+Simulation, valued for its stable spring-damper soft-contact model and
+computational speed. Its principal limitation is that soft contacts
+diverge from rigid hardware reality in ways that are platform-dependent.
+
+\emph{Isaac Sim} (NVIDIA) provides GPU-accelerated, photorealistic
+Simulation with rigid-body dynamics, enabling massively parallel RL
+training \cite{HumanoidGym2024}. Its model-based use for WBC remains
+less documented but is growing \cite{PolySim2025}.
+
+A recent benchmarking effort by Fernbach et al.\ \cite{Fernbach2018}
+explicitly compared three control schemes (HQP velocity, TSID
+acceleration, TSID torque) on TALOS in Gazebo, reporting \com{} tracking
+peaks of $5$~cm in $x$ and $1.5$~cm in $y$ during walking. This benchmark
+is the closest existing analogue to the evaluation protocol the thesis
+proposes and is therefore a critical reference point for the methodology
+and experiments chapters.
+
+\begin{criticalinsight}
+The toolchain landscape is not neutral: choosing Pinocchio\,+\,MuJoCo
+commits the thesis to a specific contact-model debate (soft vs.\ rigid
+contacts), while Pinocchio\,+\,Isaac Sim commits to a different one (CPU
+vs.\ GPU determinism and contact fidelity). The WBC literature
+consistently uses MuJoCo for torque-level validation \cite{DelPrete2016,MuJoCo2012},
+while Isaac Sim is predominantly used for sim-to-real RL
+\cite{HumanoidGym2024}. Because this thesis is model-based rather than
+RL-centric, MuJoCo is the natural platform choice for the experimental
+framework --- a decision that Chapter~\ref{chap:simulation} will
+formalise and justify in terms of contact model parameters and control
+loop integration.
+\end{criticalinsight}
+
+
+% --- 2.7 CRITICAL SYNTHESIS --- GAPS AND POSITIONING -------
+\section{Critical Synthesis --- Gaps and Positioning}
+\label{sec:sota_synthesis}
+
+The preceding sections establish three structural facts about the
+model-based humanoid \WBC{} literature.
+
+The first is that the dominant architectural pattern is \emph{layered}:
+a planning layer --- centroidal \MPC{}, footstep planner, or trajectory
+optimisation --- supplies references to an execution layer built around
+a \QP-based WBC at torque level, and this split is widely acknowledged
+as the pragmatic resolution of the centroidal-versus-full-body dynamics
+controversy \cite{Wensing2013,Koolen2016,Caron2019,Romualdi2023,Elobaid2023}.
+Post-2022 contributions --- whether focused on contact-implicit planning
+\cite{LeCleach2024,Kim2025CI}, computationally
+efficient footstep planners coupled to WBC \cite{Smaldone2025}, or
+contact-stable force parametrisations under payload \cite{Elobaid2023}
+--- all retain this two-layer architecture. The thesis architecture
+(centroidal MPC paired with QP-WBC) therefore inherits a consolidated
+design pattern rather than proposing a new one.
+
+The second fact is that, despite this architectural consolidation, the
+\emph{interface between the two layers remains underspecified}.
+Romualdi et al.\ couple the layers via non-linear centroidal MPC with
+step timing as an optimisation variable \cite{Romualdi2023}; Elobaid
+et al.\ extend this coupling with a contact-stable force parametrisation
+for payload carrying \cite{Elobaid2023}; Sleiman et al.\ unify the
+whole-body loco-manipulation problem as a single multi-contact optimal
+control problem \cite{Sleiman2021}; Smaldone et al.\ propose
+compute-budget-aware decoupling at the planner/WBC boundary
+\cite{Smaldone2025}; Le Cleac'h et al.\ eliminate the need for
+pre-defined contact sequences through contact-implicit \MPC{}
+\cite{LeCleach2024}. These proposals are plausible in isolation but use
+incompatible terminology, and no published work surveyed here reconciles
+them into a common formalism or compares them on a shared benchmark.
+
+The third fact is that the \emph{evaluation protocol for simultaneous
+loco-manipulation is effectively absent}. The unified MPC formulation of
+Sleiman et al.\ for whole-body dynamic locomotion and manipulation
+\cite{Sleiman2021} is a rare case in which the simultaneous
+loco-manipulation scenario is exercised under model-based control;
+recent learning-based loco-manipulation works
+\cite{Radosavovic2024,Sferrazza2024} sidestep the constraint-enforcement
+question entirely. Friction-cone compliance is rarely reported
+quantitatively because QP-WBC enforces it as a hard constraint by
+construction \cite{Wensing2013,Koolen2016}, and task success rates are
+almost never accompanied by confidence intervals or infeasibility
+statistics even in the TALOS benchmarking study of Fernbach et al.\
+\cite{Fernbach2018}, which is otherwise the closest analogue to a
+standardised evaluation.
+
+These three facts resolve into three explicit gaps that define the space
+available to the thesis.
+
+\begin{researchgap}
+\textbf{Methodological gap --- planner/WBC coupling.} No consensus
+framework couples a planning layer to a \QP-\WBC{} execution layer
+across different time scales, even as several candidate couplings
+coexist in the literature without a reconciliation mechanism
+\cite{Romualdi2023,Sleiman2021,Smaldone2025,LeCleach2024}.
+\end{researchgap}
+
+\begin{researchgap}
+\textbf{Evaluation gap --- loco-manipulation protocol.} No standardised
+scenario set, metric set, or reporting convention governs simultaneous
+humanoid loco-manipulation under \WBC{}. The existing TALOS benchmark
+restricts itself to locomotion-only tasks \cite{Fernbach2018}, and
+published whole-body loco-manipulation studies do not share a common
+evaluation template \cite{Sleiman2021}.
+\end{researchgap}
+
+\begin{researchgap}
+\textbf{Measurement gap --- QP infeasibility as silent failure.} The
+model-based community treats QP infeasibility as a silent failure mode
+rather than a first-class observable, even though every infeasibility
+event is informative given the hard-constraint formulation
+\cite{Wensing2013,Koolen2016}. No widely adopted reporting protocol
+tracks infeasibility rates, contact-cycle feasibility, or
+confidence-intervaled task success.
+\end{researchgap}
+
+
+\begin{figure}[htbp]
+  \centering
+  \input{figures/fig_wbc_comparison}
+  \caption{Qualitative comparison of Whole-Body Control approaches across
+           six evaluation dimensions.
+           \checkmark~=~satisfied / low cost / supported;
+           $\sim$~=~partial;
+           $\times$~=~not satisfied / high cost / absent.
+           The proposed framework (last row, highlighted) scores
+           favourably on constraint satisfaction, multi-contact support,
+           loco-manipulation, and evaluation protocol — dimensions where
+           existing approaches show the clearest limitations.
+           Scores are grounded in the literature surveyed in Sections
+           \ref{sec:sota_nullspace}--\ref{sec:sota_sim}.}
+  \label{fig:wbc_comparison}
+\end{figure}
+
+Against these three gaps the thesis positions its contribution with
+deliberate modesty in one direction and deliberate ambition in the
+other. The thesis does \emph{not} claim radical algorithmic novelty:
+the planning layer uses established non-linear centroidal MPC
+formulations \cite{Romualdi2023,Elobaid2023}, the execution layer uses a
+standard weighted QP-WBC \cite{Wensing2013,Koolen2016}, and the
+dynamics and optimisation stack reuses mature open-source infrastructure
+\cite{Pinocchio,Crocoddyl}. A reviewer expecting a new solver, a new
+cost formulation, or a new contact model will not find one in the
+methodology chapter. What the thesis does claim is a
+\emph{consolidation-and-validation} contribution, which can be stated
+along three concrete axes. First, one explicit coupling between
+centroidal MPC and QP-WBC is instantiated in Simulation and documented
+at a level of detail sufficient for reproduction, closing part of the
+methodological gap. Second, evaluation is performed on a scenario set
+$S_1$--$S_5$ that includes the simultaneous loco-manipulation case most
+often omitted in the literature \cite{Sleiman2021,Fernbach2022}. Third,
+the reporting protocol treats QP infeasibility rates, contact-cycle
+feasibility, and confidence-intervaled task success as first-class
+metrics. Taken individually, each of these pieces exists somewhere in
+the literature; taken together, under rigorous reporting, they do not.
+This conjunction is what qualifies the thesis as a master's-level
+contribution with plausible publication value.
+
+\begin{criticalinsight}
+Chapter~\ref{chap:sota} itself has two acknowledged limits that should
+temper the strength of its claims. The first is that its evidentiary
+base is bounded by the seven verified foundational sources and the
+twenty-five post-2022 candidates triaged during preparation; papers not
+retrieved by the targeted search --- in particular non-English venues
+and robotics workshops not indexed by standard paper corpora --- may
+contain counter-examples to the evaluation-absence claim, and the
+strength of the third gap above is therefore contingent on the
+completeness of the sweep rather than on an exhaustive proof of
+non-existence. The second limit is that hybrid model-plus-learning
+approaches \cite{LeCleach2024,Radosavovic2024} are deliberately scoped
+out, even though their coupling-of-layers strategies are methodologically
+closest to what the methodology chapter will propose. This exclusion is
+defensible given the thesis scope, but it leaves open the reviewer
+question of whether a learning-augmented MPC would subsume the proposed
+contribution; that question is deferred to the discussion chapter
+rather than answered here.
+\end{criticalinsight}
+
+
+% --- CHAPTER 2 CLOSING SYNTHESIS ---------------------------
+\section*{Chapter 2 --- Composite Critical Insight}
+
+Synthesising across Sections~\ref{sec:sota_foundations}--\ref{sec:sota_synthesis},
+the model-based humanoid WBC literature has matured technically --- the
+dynamics, the QP machinery, the centroidal MPC --- but stagnated
+methodologically: evaluation protocols remain ad-hoc, coupling
+architectures remain unnamed, and loco-manipulation remains
+underexplored. The thesis is therefore better understood as a
+\emph{methodological consolidation} contribution than as an algorithmic
+one, and this framing is more defensible against standard reviewer
+criticisms than the converse. The remainder of the thesis executes
+against this framing: the methodology chapter specifies one reference
+coupling, the simulation-framework chapter instantiates it, the
+experiments chapter reports against the protocol, and the discussion
+chapter add

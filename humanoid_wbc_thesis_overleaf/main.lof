@@ -1,0 +1,14 @@
+\babel@toc {english}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Taxonomy of Whole-Body Control (WBC) approaches for humanoid robots. Model-based methods (blue) are the primary focus of this chapter; learning-based approaches (grey) are retained as baseline references only (see Section~\ref {sec:sota_rl}). Representative works are indicated in brackets.}}{6}{figure.caption.6}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Timeline of key contributions to model-based Whole-Body Control for humanoid robots (2005--2026). Foundational works are shown in bold. Learning-based milestones (grey, below the axis) are included for context only. The proposed thesis contribution is indicated at 2026.}}{8}{figure.caption.7}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Hierarchical planning/execution architecture for model-based humanoid Whole-Body Control. The centroidal MPC layer generates wrench references and a contact schedule at 50--100\,Hz; the QP-based WBC layer distributes these to joint torques at 1\,kHz. The coupling interface (orange) is the underdocumented boundary identified as a methodological gap in the literature and constitutes a primary contribution of this thesis.}}{9}{figure.caption.8}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces Qualitative comparison of Whole-Body Control approaches across six evaluation dimensions. \text {$\mathsurround \z@ \mathchar "458$}~=~satisfied / low cost / supported; $\sim $~=~partial; $\times $~=~not satisfied / high cost / absent. The proposed framework (last row, highlighted) scores favourably on constraint satisfaction, multi-contact support, loco-manipulation, and evaluation protocol — dimensions where existing approaches show the clearest limitations. Scores are grounded in the literature surveyed in Sections \ref {sec:sota_nullspace}--\ref {sec:sota_sim}.}}{13}{figure.caption.9}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Overview of the proposed hierarchical WBC framework. The centroidal MPC planning layer generates reference trajectories at 1,kHz, which are tracked by the QP-based WBC execution layer at 1,kHz.}}{15}{figure.caption.10}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Software stack architecture. Real-time loop runs at 1,kHz; MPC runs asynchronously at 1,kHz.}}{20}{figure.caption.12}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }

@@ -1,0 +1,90 @@
+% ============================================================
+% FIGURE: WBC Taxonomy — Chapitre 2, §2.1 (after Foundations)
+% Anchor: \input{figures/fig_wbc_taxonomy} in ch2_state_of_the_art.tex
+% Required packages: tikz, tikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+% ============================================================
+\begin{tikzpicture}[
+  font=\small,
+  every node/.style={align=center},
+  % Node styles
+  root/.style={
+    rectangle, rounded corners=4pt,
+    draw=black!80, fill=black!8,
+    text width=5.2cm, minimum height=0.75cm,
+    font=\small\bfseries
+  },
+  branch/.style={
+    rectangle, rounded corners=3pt,
+    draw=blue!60!black, fill=blue!10,
+    text width=3.8cm, minimum height=0.7cm,
+    font=\small\bfseries
+  },
+  branchgray/.style={
+    rectangle, rounded corners=3pt,
+    draw=gray!60, fill=gray!10,
+    text width=3.8cm, minimum height=0.7cm,
+    font=\small\bfseries, text=gray!70
+  },
+  leaf/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!40, fill=blue!5,
+    text width=3.5cm, minimum height=0.65cm,
+    font=\scriptsize
+  },
+  leafgray/.style={
+    rectangle, rounded corners=2pt,
+    draw=gray!40, fill=gray!5,
+    text width=3.5cm, minimum height=0.65cm,
+    font=\scriptsize, text=gray!60
+  },
+  ref/.style={font=\tiny\itshape, text=black!50},
+  edge/.style={-{Stealth[length=4pt]}, draw=black!50, line width=0.6pt},
+]
+
+%% ROOT
+\node[root] (root) at (0,0) {Whole-Body Control (WBC)};
+
+%% LEVEL 2 — BRANCHES
+\node[branch, below left=1.1cm and 3.2cm of root]  (mb)  {Model-Based WBC};
+\node[branchgray, below right=1.1cm and 3.2cm of root] (lb) {Learning-Based WBC\\{\tiny(baseline only)}};
+
+\draw[edge] (root.south) -- ++(0,-0.35) -| (mb.north);
+\draw[edge] (root.south) -- ++(0,-0.35) -| (lb.north);
+
+%% LEVEL 3 — MODEL-BASED
+\node[leaf, below=1.0cm of mb, xshift=-2.2cm] (ns)  {Task-Priority\\Null-Space\\{\tiny[Khatib~1987; Sentis~2005]}};
+\node[leaf, below=1.0cm of mb]                (qp)  {QP-based WBC\\weighted \& HQP\\{\tiny[Wensing~2013; Koolen~2016]}};
+\node[leaf, below=1.0cm of mb, xshift=+2.2cm] (mpc) {MPC for Locomotion\\centroidal\\{\tiny[Caron~2019; Winkler~2018]}};
+
+\draw[edge] (mb.south) -- ++(0,-0.3) -| (ns.north);
+\draw[edge] (mb.south) -- ++(0,-0.3) -- (qp.north);
+\draw[edge] (mb.south) -- ++(0,-0.3) -| (mpc.north);
+
+%% QP sub-nodes
+\node[leaf, below=0.7cm of qp, xshift=-1.4cm, text width=2.8cm] (sqp)
+  {Weighted single-QP\\{\tiny\cite{Wensing2013}}};
+\node[leaf, below=0.7cm of qp, xshift=+1.4cm, text width=2.8cm] (hqp)
+  {Hierarchical QP\\{\tiny\cite{Kanoun2011}, \cite{Saab2013},\\\cite{EscandeMansard2014}}};
+
+\draw[edge] (qp.south) -- ++(0,-0.2) -| (sqp.north);
+\draw[edge] (qp.south) -- ++(0,-0.2) -| (hqp.north);
+
+%% MPC sub-nodes
+\node[leaf, below=0.7cm of mpc, xshift=-1.4cm, text width=2.8cm] (linmpc)
+  {Linear centroidal\\{\tiny\cite{Winkler2018}}};
+\node[leaf, below=0.7cm of mpc, xshift=+1.4cm, text width=2.8cm] (nlmpc)
+  {Nonlinear centroidal\\DDP/FDDP\\{\tiny\cite{Caron2019}, \cite{Crocoddyl2020}}};
+
+\draw[edge] (mpc.south) -- ++(0,-0.2) -| (linmpc.north);
+\draw[edge] (mpc.south) -- ++(0,-0.2) -| (nlmpc.north);
+
+%% LEVEL 3 — LEARNING-BASED
+\node[leafgray, below=1.0cm of lb, xshift=-1.4cm, text width=2.8cm] (rl)
+  {End-to-end RL\\{\tiny\cite{Kumar2021}}};
+\node[leafgray, below=1.0cm of lb, xshift=+1.4cm, text width=2.8cm] (hybrid)
+  {Hybrid model+learning\\{\tiny(emerging, out of scope)}};
+
+\draw[edge] (lb.south) -- ++(0,-0.3) -| (rl.north);
+\draw[edge] (lb.south) -- ++(0,-0.3) -| (hybrid.north);
+
+\end{tikzpicture}
