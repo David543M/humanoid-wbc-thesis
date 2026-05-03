@@ -27,6 +27,7 @@ master_memory.md
 
 # AI tooling scripts
 setup_github_repo.py
+commit_chapter2.ps1
 
 # AI session logbook
 13_logbook/
@@ -76,3 +77,38 @@ desktop.ini
 secrets.py
 06_writing/chapters/versions/
 06_writing/chapters/chapter_02_state_of_the_art_draft.md
+
+# AI satellite memory files (internal Claude state — LOCAL ONLY)
+mem_core.md
+mem_github.md
+mem_lit.md
+mem_log.md
+mem_method.md
+mem_sources.md
+mem_status.md
+
+# Typst migration (abandoned Session 7)
+typst_thesis/
+
+# Temp / lock files
+.~lock.*
+ziE15Os7
+ziR8nsv2
+
+# LaTeX build artefacts
+latex_thesis/*.aux
+latex_thesis/*.log
+latex_thesis/*.toc
+latex_thesis/*.lof
+latex_thesis/*.lot
+latex_thesis/*.out
+latex_thesis/*.bbl
+latex_thesis/*.blg
+latex_thesis/*.pdf
+latex_thesis/*.synctex.gz
+latex_thesis/*.upa
+latex_thesis/chapters/*.aux
+latex_thesis/appendices/*.aux
+
+# PDF outputs at root
+thesis_main.pdf

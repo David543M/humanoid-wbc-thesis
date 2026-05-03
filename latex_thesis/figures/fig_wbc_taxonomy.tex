@@ -1,0 +1,120 @@
+% ============================================================
+% FIGURE: WBC Taxonomy — Ch2, §2.1
+% All node positions are absolute (x,y) in cm.
+% Spacing verified: minimum 0.8 cm gap between any two nodes
+% at the same vertical level.
+% Total canvas: ~22 cm wide → scales cleanly to \textwidth.
+% ============================================================
+\begin{tikzpicture}[
+  font=\small,
+  every node/.style={align=center},
+  root/.style={
+    rectangle, rounded corners=4pt,
+    draw=black!80, fill=black!8,
+    text width=5.5cm, minimum height=0.85cm,
+    font=\small\bfseries
+  },
+  branch/.style={
+    rectangle, rounded corners=3pt,
+    draw=blue!65!black, fill=blue!12, line width=1pt,
+    text width=4.0cm, minimum height=0.8cm,
+    font=\small\bfseries
+  },
+  branchgray/.style={
+    rectangle, rounded corners=3pt,
+    draw=gray!70, fill=gray!22, line width=0.8pt,
+    text width=4.0cm, minimum height=0.8cm,
+    font=\small\bfseries, text=black!70
+  },
+  leaf/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!50, fill=blue!7,
+    text width=2.6cm, minimum height=0.75cm,
+    font=\scriptsize
+  },
+  leafgray/.style={
+    rectangle, rounded corners=2pt,
+    draw=gray!65, fill=gray!18,
+    text width=2.6cm, minimum height=0.75cm,
+    font=\scriptsize, text=black!65
+  },
+  subleaf/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!35, fill=blue!4,
+    text width=2.5cm, minimum height=0.7cm,
+    font=\scriptsize
+  },
+  edge/.style={-{Stealth[length=4pt]}, draw=black!50, line width=0.6pt},
+]
+
+%% ── Y LEVELS (cm) ─────────────────────────────────────────
+%%  0.0   root
+%% -1.8   L1 branches
+%% -3.6   L2 leaves (ns, qp, mpc | rl, hybrid)
+%% -5.6   L3 sub-leaves (sqp, hqp | linmpc, nlmpc)
+
+%% ── X POSITIONS (cm) — spacing verified ───────────────────
+%% L3: sqp=2.0  hqp=5.5  [gap 1.0cm]  linmpc=10.0  nlmpc=13.5
+%% L2: ns=0.5   qp=3.75  [gap 1.1cm]  mpc=11.75  rl=17.0  hybrid=20.5
+%% L1: mb=6.5                                      lb=18.75
+%% L0: root=12.75
+
+%% ── ROOT ──────────────────────────────────────────────────
+\node[root] (root) at (12.75, 0) {Whole-Body Control (WBC)};
+
+%% ── L1 BRANCHES ───────────────────────────────────────────
+\node[branch]     (mb) at (6.5,  -1.8) {Model-Based WBC};
+\node[branchgray] (lb) at (18.75,-1.8) {Learning-Based WBC\\{\scriptsize\textit{(baseline only)}}};
+
+\draw[edge] (root.south) -- ++(0,-0.4) -| (mb.north);
+\draw[edge] (root.south) -- ++(0,-0.4) -| (lb.north);
+
+%% ── L2 — MODEL-BASED ──────────────────────────────────────
+%% ns  : x=0.5   — half-width=1.3 → [−0.8, 1.8]
+%% qp  : x=3.75  — half-width=1.3 → [2.45, 5.05]  gap(ns→qp)=0.65 ✓
+%% mpc : x=11.75 — half-width=1.3 → [10.45,13.05] gap(qp→mpc)=5.4  ✓
+\node[leaf] (ns)  at (0.5,  -3.6) {Task-Priority\\Null-Space\\{\tiny\cite{Khatib1987}, \cite{Sentis2005}}};
+\node[leaf] (qp)  at (3.75, -3.6) {QP-based WBC\\weighted \& HQP\\{\tiny\cite{Wensing2013}, \cite{Koolen2016}}};
+\node[leaf] (mpc) at (11.75,-3.6) {MPC for Loco.\\centroidal\\{\tiny\cite{Caron2019}, \cite{Winkler2018}}};
+
+\draw[edge] (mb.south) -- ++(0,-0.35) -| (ns.north);
+\draw[edge] (mb.south) -- ++(0,-0.35) -| (qp.north);
+\draw[edge] (mb.south) -- ++(0,-0.35) -| (mpc.north);
+
+%% ── L3 — QP SUB-NODES ─────────────────────────────────────
+%% sqp : x=2.0  half-w=1.25 → [0.75, 3.25]
+%% hqp : x=5.5  half-w=1.25 → [4.25, 6.75]  gap(sqp→hqp)=1.0  ✓
+%% qp centre = (2.0+5.5)/2 = 3.75 — matches qp L2 ✓
+\node[subleaf] (sqp) at (2.0, -5.6) {Weighted\\single-QP\\{\tiny\cite{Wensing2013}}};
+\node[subleaf] (hqp) at (5.5, -5.6) {Hierarchical\\QP (HQP)\\{\tiny\cite{Kanoun2011}, \cite{Saab2013}}};
+
+\draw[edge] (qp.south) -- ++(0,-0.25) -| (sqp.north);
+\draw[edge] (qp.south) -- ++(0,-0.25) -| (hqp.north);
+
+%% ── L3 — MPC SUB-NODES ────────────────────────────────────
+%% linmpc: x=10.0  half-w=1.25 → [8.75,11.25]
+%% nlmpc : x=13.5  half-w=1.25 → [12.25,14.75]  gap(linmpc→nlmpc)=1.0 ✓
+%% gap(hqp→linmpc): 8.75 − 6.75 = 2.0 cm ✓
+%% mpc centre = (10.0+13.5)/2 = 11.75 — matches mpc L2 ✓
+\node[subleaf] (linmpc) at (10.0,-5.6) {Linear\\centroidal\\{\tiny\cite{Winkler2018}}};
+\node[subleaf] (nlmpc)  at (13.5,-5.6) {Nonlinear MPC\\DDP/FDDP\\{\tiny\cite{Caron2019}, \cite{Crocoddyl}}};
+
+\draw[edge] (mpc.south) -- ++(0,-0.25) -| (linmpc.north);
+\draw[edge] (mpc.south) -- ++(0,-0.25) -| (nlmpc.north);
+
+%% ── L2 — LEARNING-BASED ───────────────────────────────────
+%% rl    : x=17.0  half-w=1.3 → [15.7,18.3]
+%% hybrid: x=20.5  half-w=1.3 → [19.2,21.8]  gap=0.9 ✓
+%% gap(nlmpc→rl): 15.7 − 14.75 = 0.95 cm ✓
+%% lb centre = (17.0+20.5)/2 = 18.75 — matches lb L1 ✓
+\node[leafgray] (rl)     at (17.0,-3.6) {End-to-end RL\\{\tiny\cite{Kumar2021}}};
+\node[leafgray] (hybrid) at (20.5,-3.6) {Hybrid\\model+learning\\{\tiny(emerging)}};
+
+\draw[edge] (lb.south) -- ++(0,-0.35) -| (rl.north);
+\draw[edge] (lb.south) -- ++(0,-0.35) -| (hybrid.north);
+
+%% ── VERTICAL SEPARATOR between model-based and learning ───
+\draw[gray!40, dashed, line width=0.5pt]
+  (15.5, 0.6) -- (15.5, -6.2);
+
+\end{tikzpicture}

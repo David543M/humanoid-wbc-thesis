@@ -1,7 +1,11 @@
-# Appendix code
+# Code Appendix
+*Last updated: 2026-05-03*
 
-Frozen code snapshots included in the manuscript.
+Frozen snapshots of controller code submitted with the thesis.
+Live, iterated-upon code lives in `10_simulation/controllers_src/`.
 
-- `controllers/` — WBC controller implementations.
-- `models/` — robot/system models.
-- `utils/` — shared utilities.
+| Subfolder | Contents | Status |
+|-----------|----------|--------|
+| `controllers/` | Final WBC + MPC controller code | 🔲 To populate after Ch4 |
+| `models/` | TALOS URDF / MJCF model files | 🔲 To populate |
+| `utils/` | Logging, plotting, metric computation scripts | 🔲 To populate |

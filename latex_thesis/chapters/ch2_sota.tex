@@ -53,6 +53,7 @@ as a reference baseline.
 
 \begin{figure}[htbp]
   \centering
+  \singlespacing
   \resizebox{\textwidth}{!}{\input{figures/fig_wbc_taxonomy}}
   \caption{Taxonomy of Whole-Body Control (WBC) approaches for humanoid robots.
            Model-based methods (blue) are the primary focus of this chapter;
@@ -231,6 +232,7 @@ horizons. This blurring is the subject of Section~\ref{sec:sota_mpc}.
 
 \begin{figure}[htbp]
   \centering
+  \singlespacing
   \resizebox{\textwidth}{!}{\input{figures/fig_wbc_timeline}}
   \caption{Timeline of key contributions to model-based Whole-Body Control
            for humanoid robots (2005--2026). Foundational works are shown in
@@ -245,6 +247,7 @@ horizons. This blurring is the subject of Section~\ref{sec:sota_mpc}.
 
 \begin{figure}[htbp]
   \centering
+  \singlespacing
   \input{figures/fig_wbc_architecture}
   \caption{Hierarchical planning/execution architecture for model-based humanoid
            Whole-Body Control. The centroidal MPC layer generates wrench references
@@ -268,7 +271,7 @@ Three architectures dominate the post-2022 literature. The first is the
 \emph{linear / linearised centroidal MPC} lineage descended from the
 Linear Inverted Pendulum Model, which preserves real-time feasibility
 (under $10$~ms per solve) at the cost of accuracy in highly dynamic
-regimes \cite{Pajon2022}. The second is \emph{non-linear centroidal MPC},
+regimes \cite{Smaldone2022}. The second is \emph{non-linear centroidal MPC},
 exemplified by Romualdi et al.\ \cite{Romualdi2023} and Elobaid et al.\
 \cite{Elobaid2023}, which retains full centroidal non-linearity at the
 cost of solve times in the $50$--$70$~ms range on the iCub3 platform
@@ -396,16 +399,18 @@ proposes and is therefore a critical reference point for the methodology
 and experiments chapters.
 
 \begin{criticalinsight}
-The toolchain landscape is not neutral: choosing Pinocchio\,+\,MuJoCo
-commits the thesis to a specific contact-model debate (soft vs.\ rigid),
-while Pinocchio\,+\,Isaac Sim commits to a different one (CPU vs.\ GPU
-determinism). The selection between MuJoCo and Isaac Sim cannot be
-deferred without consequence: the literature suggests MuJoCo is
-better-supported for torque-controlled WBC research \cite{DelPrete2016,MuJoCo2012},
-while Isaac Sim is better-supported for sim-to-real RL
-\cite{HumanoidGym2024}. Because the thesis is not RL-centric, MuJoCo is
-the more conservative methodological choice and should be confirmed
-early in the methodology chapter to unblock downstream work.
+The toolchain landscape is not neutral. Pinocchio\,+\,MuJoCo commits to a
+soft-contact model whose divergence from rigid hardware is platform-dependent
+\cite{MuJoCo2012}, while Pinocchio\,+\,Isaac Sim commits to a GPU-determinism
+assumption that complicates reproducibility on CPU-bound platforms. The
+literature consistently positions MuJoCo as the preferred environment for
+torque-controlled, model-based \WBC{} research
+\cite{DelPrete2016,Koolen2016,MuJoCo2012}, whereas Isaac Sim dominates
+data-driven RL workflows \cite{HumanoidGym2024,PolySim2025}. This partition
+reflects a deeper difference in evaluation goals --- constraint satisfaction
+guarantees vs.\ sample-efficient policy learning --- and directly motivates
+the contact-model justification in \Cref{sec:contact-modeling} and the
+simulation setup in \Cref{chap:simulation}.
 \end{criticalinsight}
 
 
@@ -493,6 +498,7 @@ confidence-intervaled task success.
 
 \begin{figure}[htbp]
   \centering
+  \singlespacing
   \input{figures/fig_wbc_comparison}
   \caption{Qualitative comparison of Whole-Body Control approaches across
            six evaluation dimensions.
@@ -524,7 +530,7 @@ centroidal MPC and QP-WBC is instantiated in Simulation and documented
 at a level of detail sufficient for reproduction, closing part of the
 methodological gap. Second, evaluation is performed on a scenario set
 $S_1$--$S_5$ that includes the simultaneous loco-manipulation case most
-often omitted in the literature \cite{Sleiman2021,Fernbach2022}. Third,
+often omitted in the literature \cite{Sleiman2021,Fernbach2018}. Third,
 the reporting protocol treats QP infeasibility rates, contact-cycle
 feasibility, and confidence-intervaled task success as first-class
 metrics. Taken individually, each of these pieces exists somewhere in
@@ -567,6 +573,4 @@ one, and this framing is more defensible against standard reviewer
 criticisms than the converse. The remainder of the thesis executes
 against this framing: the methodology chapter specifies one reference
 coupling, the simulation-framework chapter instantiates it, the
-experiments chapter reports against the protocol, and the discussion
-chapter addresses the limits of the simulation-only validation in light
-of the sim-to-real asymmetry surfaced in Section~\ref{sec:sota_rl}.
+experiments chapter reports against the protocol, and th

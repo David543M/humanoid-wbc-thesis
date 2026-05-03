@@ -1,0 +1,372 @@
+% ============================================================
+%  CHAPTER 1 — Introduction
+%  Status : v1.0 — 2026-05-03
+%  Logical chain: Problem → Gap → Proposed Solution
+% ============================================================
+
+\chapter{Introduction}
+\label{chap:introduction}
+
+% ─── 1.1 MOTIVATION ─────────────────────────────────────────
+\section{Motivation}
+\label{sec:motivation}
+
+Humanoid robots occupy a singular position among robotic platforms:
+their morphology — two legs, two arms, an upright torso — is shaped to
+share the spaces that humans have built for themselves. Factories with
+narrow aisles, hospitals with doorframes calibrated to wheelchair widths,
+construction sites with uneven floors and overhead clearances: these
+environments impose structural affordances that wheeled or
+low-dimensional manipulators cannot exploit without fundamental redesign
+of the surrounding infrastructure. A humanoid robot, in principle, can
+walk through a corridor, open a door, and carry an object, relying on
+the same geometry that human engineers assumed when the corridor was
+laid out. This promise has motivated decades of research, from the
+pioneering demonstrations of Honda's ASIMO and the HRP series to the
+more recent platforms — Boston Dynamics Atlas, PAL Robotics TALOS,
+Unitree H1 and G1 — which operate at human scale with torque-controlled
+joints and on-board perception \cite{Koolen2016}.
+
+Realising this promise, however, demands more than mechanical fidelity.
+A 28--32 degree-of-freedom (DOF) humanoid body simultaneously executing
+locomotion and a manipulation task faces a control problem of exceptional
+difficulty: the system must coordinate leg joints to maintain dynamic
+balance, arm and torso joints to position an end-effector, and the
+shared trunk degrees of freedom that couple these two functions — all
+at kilohertz control rates, subject to hard constraints on joint
+torques, contact forces, and kinematic reachability
+\cite{Sentis2005,Wensing2013}. Decomposing the robot into independent
+subsystems — a leg controller and an arm controller — is the simplest
+architectural choice, but it fails under precisely the conditions that
+make humanoid platforms valuable: when locomotion perturbs the arm
+workspace, when a heavy carried load shifts the whole-body centre of
+mass, or when a manipulation task requires the robot to lean and thus
+displace its support polygon \cite{Koolen2016}.
+
+\WBC{} emerged as the theoretical answer to this coordination problem.
+Rather than treating the limbs as independent, WBC considers all DOF as
+a single dynamical system subject to a hierarchy of simultaneous tasks
+and physical constraints \cite{Khatib1987,Sentis2005}. A postural
+stability task maintains the robot upright; a locomotion task advances
+the centre of mass; a manipulation task guides the end-effector to a
+target pose; and each task contributes to the same joint torque command
+through a priority-aware reconciliation mechanism. This unification
+is what makes loco-manipulation — the simultaneous execution of
+locomotion and manipulation — tractable in principle.
+
+In practice, the gap between the theoretical framework and a deployable
+implementation is substantial. Whole-body optimisation at joint-torque
+level requires solving a constrained mathematical program at every
+control step (typically 500\,Hz to 1\,kHz), incorporating contact
+physics that are inherently uncertain, and doing so on processors that
+must also run perception, state estimation, and safety monitoring. The
+tension between constraint richness and computational tractability has
+produced a stratified research landscape: lightweight task-priority
+methods that sacrifice constraint handling for speed \cite{Sentis2005},
+dense \QP{} formulations that capture contact physics rigorously but at
+higher computational cost \cite{Wensing2013,Koolen2016}, and \MPC{}
+layers that plan over a receding horizon but operate on reduced
+dynamical models \cite{Orin2013}. Each layer solves a part of the
+problem; no single, well-documented, reproducible framework has
+integrated all three for simultaneous loco-manipulation and subjected
+the integration to standardised evaluation.
+
+This thesis is motivated by that gap.
+
+\begin{criticalinsight}
+  The argument from morphological fitness — humanoids for human spaces —
+  carries rhetorical force but must not obscure the actual technical
+  contribution. The motivation section establishes \emph{why the problem
+  matters}, not why this particular solution is correct. A reviewer is
+  entitled to ask whether the same task could be accomplished by a
+  well-designed mobile manipulator; the honest answer is that, for a
+  range of dexterous physical tasks, it could. The specific claim this
+  thesis makes is narrower: that \emph{if} one has a humanoid robot, the
+  absence of a reproducible, integrated WBC framework for simultaneous
+  loco-manipulation is a scientific and engineering gap worth addressing
+  rigorously. That claim is not weakened by the existence of alternative
+  platforms.
+\end{criticalinsight}
+
+
+% ─── 1.2 PROBLEM STATEMENT ──────────────────────────────────
+\section{Problem Statement}
+\label{sec:problem}
+
+The state of the art in \WBC{} for humanoid robots, as surveyed in
+\Cref{chap:sota}, reveals two interacting deficiencies that the present
+work targets directly.
+
+\paragraph{The architectural coupling gap.}
+A complete WBC pipeline for simultaneous loco-manipulation requires at
+minimum two functional layers: a \emph{planning layer} that generates
+kinematically and dynamically feasible reference trajectories (footstep
+placements, centre-of-mass trajectories, end-effector targets), and an
+\emph{execution layer} that translates these references into joint
+torques while satisfying, at every control step, the constraints imposed
+by contact physics, actuator limits, and whole-body dynamics.
+\MPC{} operating on centroidal dynamics \cite{Orin2013} is the
+established approach for the planning layer; \QP{}-based WBC is the
+established approach for the execution layer \cite{Wensing2013,Koolen2016}.
+Both are mature sub-fields with recognised algorithmic frameworks.
+What remains underspecified, however, is the \emph{interface} between
+these layers: how the contact schedule is passed from planner to
+executor, how timing mismatches are handled when the MPC horizon and
+the QP control loop run at different rates, and how constraint
+violations at the execution level are fed back to the planner.
+Existing implementations — Crocoddyl \cite{Crocoddyl}, TSID
+\cite{DelPrete2016}, iCub-controllers \cite{Elobaid2023} — each resolve
+this interface differently, often in platform-specific code that is not
+documented at reproduction level. The field therefore lacks a consensus
+architectural blueprint for the planning--execution coupling in
+simultaneous loco-manipulation.
+
+\paragraph{The evaluation standardisation gap.}
+Even where WBC frameworks exist, their comparative assessment is
+impeded by the absence of standardised benchmark scenarios and metrics.
+Published results report different tasks (static balancing, walking,
+push recovery, pick-and-place), different perturbation protocols
+(impulse magnitude, direction, timing), and different success criteria —
+often whether the robot ``fell'' is the only reported metric —
+making it effectively impossible to determine whether a claimed
+improvement is attributable to the controller design or to a more
+favourable evaluation setup \cite{Sferrazza2024}. This evaluation
+heterogeneity is particularly acute for loco-manipulation, where no
+published benchmark addresses simultaneous locomotion and manipulation
+with reproducible, quantified metrics.
+
+This thesis addresses both gaps through two linked contributions:
+(i)~an explicit design of the centroidal-\text{MPC}--\text{QP-WBC}
+coupling, documented at reproduction level, and (ii)~a reproducible
+evaluation protocol (scenarios S1 through S5) with standardised
+metrics, validated against three baselines under identical simulation
+conditions.
+
+\begin{criticalinsight}
+  The evaluation gap is arguably more consequential for the field's
+  long-term progress than the architectural gap. A methodologically
+  excellent framework that is evaluated idiosyncratically contributes
+  little to cumulative science: subsequent groups cannot determine
+  whether their own results represent progress. Conversely, a
+  well-defined evaluation protocol, even paired with a modest
+  implementation, creates a reusable reference point. The dual
+  contribution structure of this thesis reflects this prioritisation:
+  the framework is the vehicle; the reproducible protocol is the
+  primary scientific deposit.
+\end{criticalinsight}
+
+
+% ─── 1.3 RESEARCH QUESTION ──────────────────────────────────
+\section{Research Question and Objectives}
+\label{sec:research-question}
+
+The investigation is organised around the following primary research
+question, locked as of 2026-04-30 in alignment with the thesis
+supervisor:
+
+\begin{quote}
+  \textit{``How can a \WBC{} framework — combining a centroidal MPC
+  planning layer with a \QP{}-based execution layer — be designed,
+  implemented, and rigorously evaluated in simulation to enable a
+  humanoid robot to perform stable, simultaneous locomotion and
+  manipulation tasks under dynamic and contact constraints?''}
+\end{quote}
+
+\noindent Three sub-questions structure the investigation:
+
+\begin{enumerate}[label=\textbf{SQ\arabic*}]
+  \item What are the key limitations of existing WBC formulations
+        (task-priority, QP-based, MPC-based) when applied to full-body
+        humanoid coordination involving simultaneous locomotion and
+        manipulation?
+  \item How can contact dynamics be modelled and integrated in a
+        simulation environment to faithfully replicate the physical
+        behaviour expected of a torque-controlled humanoid?
+  \item What scenarios and metrics constitute a rigorous, reproducible,
+        simulation-based evaluation of a WBC framework for humanoid
+        loco-manipulation?
+\end{enumerate}
+
+\noindent SQ1 is addressed in \Cref{chap:sota} through a critical
+synthesis of the model-based WBC literature. SQ2 is addressed in
+\Cref{chap:simulation} through the design of the MuJoCo simulation
+environment and its contact model. SQ3 is addressed jointly in
+\Cref{chap:methodology} (protocol design) and \Cref{chap:experiments}
+(quantitative results).
+
+
+% ─── 1.4 HYPOTHESES ─────────────────────────────────────────
+\section{Hypotheses}
+\label{sec:hypotheses}
+
+The following three hypotheses operationalise the research question into
+falsifiable empirical claims. Each hypothesis is associated with a
+primary evaluation criterion; falsification conditions are stated
+explicitly in \Cref{chap:methodology}.
+
+\begin{hypothesis}{H1}
+  A hierarchical \QP{}-based \WBC{} formulation, planned by a centroidal
+  MPC layer, can achieve stable whole-body coordination across
+  simultaneous locomotion and manipulation tasks — measured by a task
+  success rate above a threshold defined from the benchmark literature
+  and by bounded centre-of-mass tracking error throughout scenarios S1
+  through S5.
+\end{hypothesis}
+
+\begin{hypothesis}{H2}
+  MuJoCo simulation is a sufficient environment to validate
+  proof-of-concept for the proposed WBC framework: tasks that succeed in
+  simulation are indicative of hardware feasibility, modulo the
+  sim-to-real gap characterised in \Cref{chap:discussion}.
+\end{hypothesis}
+
+\begin{hypothesis}{H3}
+  Explicit contact modelling and task-priority hierarchies, as
+  implemented in the proposed framework, produce lower centre-of-mass
+  deviation and lower contact force variance than an unconstrained
+  torque-control baseline under multi-contact transition scenarios.
+\end{hypothesis}
+
+
+% ─── 1.5 SCOPE AND LIMITATIONS ──────────────────────────────
+\section{Scope and Limitations}
+\label{sec:scope}
+
+\begin{table}[h]
+  \centering
+  \caption{Thesis scope definition — in-scope and out-of-scope elements.}
+  \label{tab:scope}
+  \begin{tabular}{p{0.45\linewidth} p{0.45\linewidth}}
+    \toprule
+    \textbf{In Scope} & \textbf{Out of Scope} \\
+    \midrule
+    Simulation only (MuJoCo \cite{MuJoCo2012})
+      & Hardware experiments \\
+    WBC for simultaneous loco-manipulation
+      & Manipulation-only or locomotion-only \\
+    TALOS humanoid (PAL Robotics) URDF
+      & Wheeled or legged non-humanoid robots \\
+    Centroidal MPC + QP-based WBC
+      & Deep RL as a primary contribution \\
+    Reproducible evaluation protocol (S1--S5)
+      & Sensor fusion / state estimation \\
+    Comparative baselines: task-priority, torque ctrl, RL
+      & Long-horizon task sequencing \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The scope boundary around simulation is a deliberate methodological
+choice with two motivations. First, hardware experiments on a
+full-scale torque-controlled humanoid require significant
+infrastructure — a physical TALOS robot, custom actuator drivers,
+safety systems, and operator expertise — that exceeds the resource
+envelope of a solo master's thesis. Second, and more fundamentally,
+simulation provides full state observability and exact reproducibility:
+baselines can be evaluated on strictly identical conditions,
+perturbations can be parameterised precisely, and results can be
+generated from a public repository without hardware access. The value
+of reproducibility is not a post-hoc rationalisation but a design
+criterion: the evaluation gap identified in \Cref{sec:problem} is
+partly a consequence of results that are hardware-dependent and
+therefore non-reproducible by third parties.
+
+The choice of MuJoCo \cite{MuJoCo2012} as the simulation environment is
+motivated by its widely acknowledged contact stability, its adoption in
+the model-based WBC community, and the availability of a validated
+TALOS URDF model. The choice of TALOS as the target platform reflects
+the same considerations: it is an open research platform with
+documented kinematics and inertial parameters, torque-controlled joints
+matched to the WBC execution layer's assumptions, and a growing body of
+community software (Pinocchio \cite{Pinocchio}, Stack-of-Tasks).
+
+The exclusion of deep reinforcement learning as a \emph{primary
+contribution} does not imply a dismissal of RL-based approaches. Three
+baselines include an RL policy, precisely to provide a cross-paradigm
+comparison. The thesis does not argue that WBC is universally superior
+to RL; it argues that the two approaches have different design
+objectives — constraint satisfaction guarantees versus learned agility
+— and that a fair comparison requires the standardised evaluation
+protocol this work provides.
+
+
+% ─── 1.6 CONTRIBUTIONS ──────────────────────────────────────
+\section{Contributions}
+\label{sec:contributions}
+
+This thesis makes three principal contributions.
+
+\paragraph{Contribution~1 — A documented WBC framework for simultaneous
+loco-manipulation.}
+A hierarchical control architecture is designed, implemented in
+simulation, and documented at reproduction level. The architecture
+couples a centroidal MPC planning layer — operating on a reduced dynamic
+model of the TALOS humanoid — with a \QP{}-based whole-body execution
+layer that enforces rigid-body dynamics, joint torque limits, and
+friction-cone constraints at 1\,kHz. The interface between the two
+layers, including contact schedule representation and rate decoupling,
+is specified explicitly. The full implementation is released as an
+open-access simulation repository (MuJoCo scene, TALOS URDF, controller
+code, scenario configurations) to enable direct replication.
+
+\paragraph{Contribution~2 — A reproducible evaluation protocol for
+humanoid WBC.}
+Five evaluation scenarios (S1:~static balance; S2:~bipedal walking;
+S3:~push recovery; S4:~simultaneous walking and manipulation;
+S5:~perturbation under loco-manipulation) are defined with precise
+parameterisation of environment, initial conditions, perturbation
+magnitude, and success criteria. A standardised metric set — CoM
+tracking error, contact force variance, task success rate, and QP solve
+time — is anchored in benchmark values from the literature. The
+protocol is designed so that any WBC framework can be evaluated against
+it given access to the simulation environment.
+
+\paragraph{Contribution~3 — A comparative baseline analysis.}
+The proposed framework is benchmarked against three baselines:
+(i)~a task-priority null-space WBC without explicit inequality
+constraints, (ii)~an unconstrained joint-torque controller, and
+(iii)~a learned locomotion policy representative of the RL paradigm.
+Results across S1--S5 provide a quantitative reference for future work
+and allow hypotheses H1--H3 to be evaluated under controlled conditions.
+
+The thesis does not claim to supersede established toolchains such as
+Crocoddyl \cite{Crocoddyl} or TSID \cite{DelPrete2016}. The contribution
+is complementary: an explicit coupling design for the specific case of
+simultaneous loco-manipulation, and an evaluation infrastructure that
+those toolchains could equally be assessed against.
+
+
+% ─── 1.7 THESIS STRUCTURE ───────────────────────────────────
+\section{Thesis Structure}
+\label{sec:structure}
+
+The remainder of this thesis is organised as follows.
+
+\Cref{chap:sota} reviews the state of the art in \WBC{} for humanoid
+robots. Model-based methods are examined in three groups — task-priority
+and null-space formulations, QP-based WBC, and centroidal MPC — before
+learning-based approaches are discussed as a baseline reference. The
+chapter concludes with a synthesis that maps the literature gaps to the
+contributions of this work.
+
+\Cref{chap:methodology} formalises the proposed WBC framework. The
+floating-base dynamics, task hierarchy, QP formulation, and centroidal
+MPC layer are specified mathematically. The coupling interface and the
+evaluation protocol (S1--S5) are defined in detail.
+
+\Cref{chap:simulation} describes the simulation environment: the MuJoCo
+scene, the TALOS URDF, the contact model, and the software stack
+connecting Pinocchio's kinematic library \cite{Pinocchio} to the QP
+solver.
+
+\Cref{chap:experiments} presents quantitative results across scenarios
+S1 through S5, with systematic comparison against the three baselines.
+
+\Cref{chap:discussion} interprets the results, analyses the limits of
+the simulation-based validation, and examines the sim-to-real gap in
+the context of this framework.
+
+\Cref{chap:conclusion} summarises the contributions, evaluates
+hypotheses H1--H3 against the experimental evidence, and outlines
+directions for future work, including hardware transfer and extensions
+to long-horizon task sequencing.

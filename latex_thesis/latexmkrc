@@ -1,0 +1,5 @@
+## Cranfield Thesis — latexmk configuration
+## Compatible with Overleaf (free & premium) and local VS Code + LaTeX Workshop
+$pdflatex = 'pdflatex -interaction=nonstopmode -synctex=1 %O %S';
+$pdf_mode = 1;       # produce PDF via pdflatex
+$bibtex_use = 2;     # run bibtex/biber as needed

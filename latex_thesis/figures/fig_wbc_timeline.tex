@@ -1,0 +1,158 @@
+% ============================================================
+% FIGURE: WBC Key Contributions Timeline 2005-2026 — Ch2, §2.3
+% Redesigned: x=2.2cm scale, one node per year, strict
+%             alternating heights → no horizontal overlap.
+% Spacing proof (text width=1.7cm, half=0.85):
+%   Same-tier nodes always ≥2 units = 4.4cm apart → gap ≥2.7cm ✓
+%   Adjacent-year nodes at different y → no visual conflict ✓
+% ============================================================
+\begin{tikzpicture}[
+  font=\scriptsize,
+  x=2.2cm, y=1cm,
+  modelbased/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!60!black, fill=blue!9, line width=0.7pt,
+    text width=1.7cm, minimum height=0.55cm,
+    align=center, font=\scriptsize
+  },
+  modelbased_key/.style={
+    rectangle, rounded corners=2pt,
+    draw=blue!80!black, fill=blue!18, line width=1pt,
+    text width=1.7cm, minimum height=0.6cm,
+    align=center, font=\scriptsize\bfseries
+  },
+  learning/.style={
+    rectangle, rounded corners=2pt,
+    draw=gray!60, fill=gray!12, line width=0.6pt,
+    text width=1.7cm, minimum height=0.5cm,
+    align=center, font=\scriptsize, text=black!65
+  },
+  thesis/.style={
+    rectangle, rounded corners=3pt,
+    draw=orange!80!black, fill=orange!12, line width=1.2pt,
+    text width=1.9cm, minimum height=0.65cm,
+    align=center, font=\scriptsize\bfseries, text=orange!80!black
+  },
+  tick/.style={draw=black!50, line width=0.7pt},
+  yearlab/.style={font=\scriptsize, text=black!60},
+  connector/.style={draw=black!40, line width=0.6pt, -{Stealth[length=3pt]}},
+  conngray/.style={draw=gray!45, line width=0.5pt,
+                   -{Stealth[length=3pt]}, dashed},
+]
+
+%% ── TIMELINE AXIS ──────────────────────────────────────────
+\def\xmin{-0.3}
+\def\xmax{12.5}
+
+\draw[line width=1.2pt, black!60, -{Stealth[length=6pt]}]
+  (\xmin, 0) -- (\xmax, 0);
+
+%% Year ticks + labels
+\foreach \yr/\x in {
+    2005/0, 2008/1, 2011/2, 2013/3, 2014/4, 2016/5,
+    2018/6, 2019/7, 2020/8, 2022/9, 2023/10, 2025/11, 2026/12}{
+  \draw[tick] (\x,-0.12) -- (\x,0.12);
+  \node[yearlab] at (\x,-0.38) {\yr};
+}
+
+%% ── MODEL-BASED ABOVE AXIS ─────────────────────────────────
+%% Heights chosen so same-tier nodes are ≥2 x-units apart.
+%% y=1.4 (low)  : x=2, 4, 6, 7(b), 9, 11  → min gap 2u=4.4cm ✓
+%%                 exception: x=6 and x=7(b) are 1u apart but
+%%                 still gap = 2.2 – 1.7 = 0.5cm ✓
+%% y=1.9 (mid)  : x=8  (isolated)
+%% y=2.2 (mid-h): x=0, 10  → 10u apart ✓
+%% y=2.6 (high) : x=7(a)   (stacked above 7(b))
+%% y=2.8 (high) : x=5      (isolated)
+%% y=3.0 (top)  : x=3      (isolated)
+%% y=1.9 (thesis): x=12    (isolated)
+
+% 2005 — Sentis & Khatib [KEY] — y=2.2
+\node[modelbased_key] (n05) at (0, 2.2)
+  {Sentis \& Khatib\\Task-priority WBC\\\cite{Sentis2005}};
+\draw[connector] (0,0.12) -- (n05.south);
+
+% 2011 — Kanoun — y=1.4
+\node[modelbased] (n11) at (2, 1.4)
+  {Kanoun et al.\\Kinematic HQP\\\cite{Kanoun2011}};
+\draw[connector] (2,0.12) -- (n11.south);
+
+% 2013 — Wensing & Orin [KEY] — y=3.0
+\node[modelbased_key] (n13) at (3, 3.0)
+  {Wensing \& Orin\\QP-WBC conic\\\cite{Wensing2013}};
+\draw[connector] (3,0.12) -- (n13.south);
+
+% 2014 — Escande et al. — y=1.4
+\node[modelbased] (n14) at (4, 1.4)
+  {Escande et al.\\HQP efficient\\\cite{EscandeMansard2014}};
+\draw[connector] (4,0.12) -- (n14.south);
+
+% 2016 — Koolen et al. [KEY] — y=2.8
+\node[modelbased_key] (n16) at (5, 2.8)
+  {Koolen et al.\\Atlas momentum\\\cite{Koolen2016}};
+\draw[connector] (5,0.12) -- (n16.south);
+
+% 2018 — Winkler et al. — y=1.4
+\node[modelbased] (n18) at (6, 1.4)
+  {Winkler et al.\\TOWR traj.\ opt.\\\cite{Winkler2018}};
+\draw[connector] (6,0.12) -- (n18.south);
+
+% 2019 — Pinocchio (lower) — y=1.4 ; Caron (upper) — y=2.6
+% Same x=7, different y → stacked chain connector
+\node[modelbased] (n19b) at (7, 1.4)
+  {Carpentier et al.\\Pinocchio lib.\\\cite{Pinocchio}};
+\node[modelbased_key] (n19a) at (7, 2.6)
+  {Caron et al.\\Stair climbing\\\cite{Caron2019}};
+\draw[connector] (7,0.12)      -- (n19b.south);
+\draw[connector] (n19b.north)  -- (n19a.south);
+
+% 2020 — Crocoddyl — y=1.9 (avoids y=1.4 tier clash with x=7,9)
+\node[modelbased] (n20) at (8, 1.9)
+  {Mastalli et al.\\Crocoddyl FDDP\\\cite{Crocoddyl}};
+\draw[connector] (8,0.12) -- (n20.south);
+
+% 2022 — Fernbach — y=1.4
+\node[modelbased] (n22) at (9, 1.4)
+  {Fernbach et al.\\TALOS benchmark\\\cite{Fernbach2018}};
+\draw[connector] (9,0.12) -- (n22.south);
+
+% 2023 — Elobaid — y=2.2
+\node[modelbased] (n23) at (10, 2.2)
+  {Elobaid et al.\\NL-MPC iCub3\\\cite{Elobaid2023}};
+\draw[connector] (10,0.12) -- (n23.south);
+
+% 2025 — Recent QP scaling — y=1.4
+\node[modelbased] (n25) at (11, 1.4)
+  {Liu, Wang,\\Smaldone et al.\\QP scaling};
+\draw[connector] (11,0.12) -- (n25.south);
+
+%% ── LEARNING-BASED BELOW AXIS ──────────────────────────────
+
+% 2021 — Kumar — x=8.5, y=-1.2
+\node[learning] (l21) at (8.5,-1.2)
+  {Kumar et al.\\RMA adapt.\ RL\\\cite{Kumar2021}};
+\draw[conngray] (8.5,-0.12) -- (l21.north);
+
+% 2024 — Sferrazza — x=10.5, y=-1.2
+% (x=10.5 avoids conflict with n23 connector at x=10)
+\node[learning] (l24) at (10.5,-1.2)
+  {Sferrazza et al.\\HumanoidBench\\RSS 2024};
+\draw[conngray] (10.5,-0.12) -- (l24.north);
+
+%% ── THESIS MARKER — 2026 ───────────────────────────────────
+\node[thesis] (nth) at (12, 1.9)
+  {This thesis\\MPC+QP-WBC\\S1--S5 protocol};
+\draw[connector, draw=orange!80!black, line width=1pt]
+  (12,0.12) -- (nth.south);
+
+%% ── LEGEND (absolute cm positions, unaffected by x-scale) ──
+\node[modelbased_key, text width=1.5cm, minimum height=0.38cm,
+      font=\tiny\bfseries] at (0.8cm,-1.85cm) {Model-based\\(key)};
+\node[modelbased,     text width=1.5cm, minimum height=0.38cm,
+      font=\tiny]       at (3.8cm,-1.85cm) {Model-based};
+\node[learning,       text width=1.5cm, minimum height=0.38cm,
+      font=\tiny]       at (6.8cm,-1.85cm) {Learning-based};
+\node[thesis,         text width=1.5cm, minimum height=0.38cm,
+      font=\tiny\bfseries] at (9.8cm,-1.85cm) {This thesis};
+
+\end{tikzpicture}

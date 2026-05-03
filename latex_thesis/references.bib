@@ -189,13 +189,13 @@
 % NOT Pajon, Caron, Kajita as listed here.
 % ACTION: Verify whether a Pajon+Caron+Kajita paper on this topic exists separately,
 % or replace with the correct Smaldone et al. 2022 Frontiers entry.
-@article{Pajon2022,
+@article{Smaldone2022,
   author    = {Smaldone, Filippo M. and Scianca, Nicola and Lanari, Leonardo and Oriolo, Giuseppe},
   title     = {From Walking to Running: {3D} Humanoid Gait Generation via {MPC}},
   journal   = {Frontiers in Robotics and AI},
   year      = {2022},
   doi       = {10.3389/frobt.2022.876613},
-  note      = {[STATUS: VERIFIED 2026-04-30 --- authors corrected to Smaldone/Scianca/Lanari/Oriolo; BibKey kept as Pajon2022 pending supervisor confirmation; update cite{} calls in Ch2 accordingly]}
+  note      = {[STATUS: VERIFIED 2026-05-03 --- BibKey renamed Pajon2022→Smaldone2022; correct authors confirmed; Frontiers Robot. AI 2022; all cite\{\} calls in Ch2 updated]}
 }
 
 @article{Wensing2023Review,
@@ -209,23 +209,24 @@
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND in any database. Likely AI-generated placeholder.
 % Replace with a verified 2025-2026 contact-implicit NMPC paper before submission.
-% @article{Patrizi2026, ...}
+% article{Patrizi2026 — REMOVED, see note above}
 
 @article{Smaldone2025,
-  author    = {Smaldone, Filippo M. and Scianca, Nicola and Modugno, Valerio and Lanari, Leonardo and Oriolo, Giuseppe},
-  title     = {Feasibility-Driven Model Predictive Control for Humanoid Walking on Uneven Terrain},
-  journal   = {IEEE Transactions on Robotics},
+  author    = {Scianca, Nicola and Smaldone, Filippo M. and Lanari, Leonardo and Oriolo, Giuseppe},
+  title     = {A Feasibility-Driven {MPC} Scheme for Robust Gait Generation in Humanoids},
+  journal   = {Robotics and Autonomous Systems},
   year      = {2025},
-  note      = {[STATUS: PENDING VERIFICATION]}
+  doi       = {10.1016/j.robot.2025.104430},
+  note      = {[STATUS: VERIFIED 2026-05-03 --- venue corrected IEEE T-RO→Robotics and Autonomous Systems (Elsevier); DOI 10.1016/j.robot.2025.104430; Scianca first author confirmed]}
 }
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND in any database. Likely AI-generated placeholder.
 % Sleiman2021 already covers the unified MPC loco-manipulation topic.
-% @article{Liu2025, ...}
+% article{Liu2025 — REMOVED, see note above}
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND as described. A real contact-implicit MPC paper
 % exists (Kim et al., IJRR 2025) but does not match this entry. Replace if needed.
-% @article{Wang2025a, ...}
+% article{Wang2025a — REMOVED, see note above}
 
 @article{Sleiman2021,
   author    = {Sleiman, Jean-Pierre and Farshidian, Farbod and Minniti, Maria Vittoria and Hutter, Marco},
@@ -290,27 +291,39 @@
   note      = {[STATUS: VERIFIED 2026-04-30 --- residual action learning for sim-to-real WBC on humanoids; replaces Tang2025; arXiv:2502.01143]}
 }
 
-% --- REINFORCEMENT LEARNING / HYBRID ------------------------
+% --- REINFORCEMENT LEARNING ---------------------------------
+
+@inproceedings{Kumar2021,
+  author    = {Kumar, Ashish and Fu, Zipeng and Pathak, Deepak and Malik, Jitendra},
+  title     = {{RMA}: Rapid Motor Adaptation for Legged Robots},
+  booktitle = {Robotics: Science and Systems (RSS)},
+  year      = {2021},
+  doi       = {10.15607/RSS.2021.XVII.011},
+  note      = {[STATUS: PENDING VERIFICATION --- RMA sim-to-real adaptation for legged robots;
+               cited as canonical RL baseline for agile locomotion; added 2026-05-03]}
+}
+
+% --- REMOVED / REPLACED ENTRIES ----------------------------
 % Note: Tang2025, Zhang2025Falcon, Singh2025, Kuang2025 removed 2026-04-30 (unverifiable).
 % Verified replacements: Radosavovic2024 (sim-to-real), LeCleach2024 (contact-implicit), ASAP2025 (residual WBC).
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND with this exact title/authors in RAL 2025.
 % Replace with a verified residual-WBC paper before submission.
-% @article{Tang2025, ...}
+% article{Tang2025 — REMOVED, see note above}
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND as described in RAL 2025. Likely AI-generated placeholder.
 % For sim-to-real RL, use verified alternatives: HumanoidGym2024, PolySim2025.
-% @article{Kuang2025, ...}
+% article{Kuang2025 — REMOVED, see note above}
 
 % ❌ REMOVED 2026-04-30 — TITLE AND VENUE WRONG. Real FALCON is:
 %   "FALCON: Learning Force-Adaptive Humanoid Loco-Manipulation"
 %   arXiv:2505.06776, L4DC 2026. Completely different topic (force adaptation, not agile locomotion).
 %   Add only if force-adaptive loco-manipulation is relevant to thesis scope.
-% @article{Zhang2025Falcon, ...}
+% article{Zhang2025Falcon — REMOVED, see note above}
 
 % ❌ REMOVED 2026-04-30 — NOT FOUND in IEEE T-RO 2025. Likely AI-generated placeholder.
 % Wensing2023Review already covers the MPC vs RL comparative landscape.
-% @article{Singh2025, ...}
+% article{Singh2025 — REMOVED, see note above}
 
 % --- DYNAMICS LIBRARIES & TOOLCHAINS ------------------------
 
@@ -334,16 +347,16 @@
 
 % --- TSID (added 2026-04-25, post-council Correction 2) -----
 
-@inproceedings{DelPrete2016,
+@article{DelPrete2016,
   author    = {{Del Prete}, Andrea and Mansard, Nicolas and Ramos, Oscar E. and Stasse, Olivier and Nori, Francesco},
   title     = {Implementing Torque Control with High-Ratio Gear Boxes and Without Joint-Torque Sensors},
-  booktitle = {International Journal of Humanoid Robotics},
+  journal   = {International Journal of Humanoid Robotics},
   volume    = {13},
   number    = {1},
   pages     = {1550044},
   year      = {2016},
   doi       = {10.1142/S0219843615500449},
-  note      = {[STATUS: PENDING VERIFICATION --- added 2026-04-25 council Correction 2; cited as the canonical reference for the TSID library / torque-level QP-WBC stack on Pinocchio. Verify whether a more direct TSID library paper exists before submission.]}
+  note      = {[STATUS: VERIFIED 2026-05-03 --- IJHR 2016, valid torque-control implementation paper. A more direct TSID formulation paper is arXiv:1410.3863 (Del Prete et al., RSS 2014) — add if needed. Note: arXiv:1612.08064 is unrelated (biology paper).]}
 }
 
 % --- SIMULATION PLATFORMS -----------------------------------
@@ -363,21 +376,22 @@
   title     = {{HumanoidBench}: Simulated Humanoid Benchmark for Whole-Body Locomotion and Manipulation},
   booktitle = {Robotics: Science and Systems (RSS)},
   year      = {2024},
-  note      = {[STATUS: VERIFIED 2026-04-30 --- arXiv:2403.10506; title corrected (singular Benchmark); full authors added; venue = RSS 2024]}
+  note      = {[STATUS: VERIFIED 2026-04-30 --- arXiv:2403.10506; title corrected; venue = RSS 2024]}
 }
 
 @misc{HumanoidGym2024,
-  author    = {{Humanoid-Gym Contributors}},
-  title     = {{Humanoid-Gym}: Reinforcement Learning Toolkit for Sim-to-Real Humanoid Locomotion},
-  year      = {2024},
-  howpublished = {Open-source project, GitHub},
-  note      = {[STATUS: PENDING VERIFICATION]}
+  author       = {Gu, Xinyang and Wang, Yen-Jen and Chen, Jianyu},
+  title        = {{Humanoid-Gym}: Reinforcement Learning for Humanoid Robot with Zero-Shot Sim2Real Transfer},
+  year         = {2024},
+  howpublished = {arXiv preprint arXiv:2404.05695},
+  note         = {[STATUS: VERIFIED 2026-05-03 --- arXiv:2404.05695; authors corrected from Contributors placeholder; RobotEra XBot sim-to-real toolkit]}
 }
 
 @article{PolySim2025,
-  author    = {{PolySim Contributors}},
-  title     = {{PolySim}: Bridging the Sim-to-Real Gap for Humanoid Control via Multi-Simulator Dynamics Randomization},
-  journal   = {arXiv preprint arXiv:2510.01708},
-  year      = {2025},
-  note      = {[STATUS: VERIFIED 2026-04-30 --- title corrected from "Multi-Physics Simulation Harness"; arXiv:2510.01708 confirmed]}
+  author  = {{PolySim Contributors}},
+  title   = {{PolySim}: Bridging the Sim-to-Real Gap for Humanoid Control
+             via Multi-Simulator Dynamics Randomization},
+  journal = {arXiv preprint arXiv:2510.01708},
+  year    = {2025},
+  note    = {[STATUS: VERIFIED 2026-04-30 --- arXiv:2510.01708 confirmed]}
 }

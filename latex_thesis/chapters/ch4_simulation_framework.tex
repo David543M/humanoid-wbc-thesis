@@ -1,0 +1,135 @@
+% ============================================================
+%  CHAPTER 4 — Simulation Framework
+%  Logical chain: Proposed Solution → Implementation
+%  Status: Not started | Blocking: PQ1 (robot model), PQ2 (simulator)
+% ============================================================
+
+\chapter{Simulation Framework}
+\label{chap:simulation}
+
+
+% TODO: Update once PQ1 and PQ2 are resolved (master_memory §16).
+% Current candidates: MuJoCo or Isaac Sim; TALOS or custom URDF humanoid.
+
+\lipsum[25]
+
+% ─── 4.1 SIMULATOR SELECTION ────────────────────────────────
+\section{Simulator Selection and Justification}
+
+
+% Compare MuJoCo vs. Isaac Sim:
+%   - MuJoCo: fast, stable contacts (soft model), widely used in WBC literature
+%   - Isaac Sim: GPU-accelerated, photorealistic, better for parallel training
+% Decision criteria: contact fidelity, reproducibility, community support.
+% TODO: Fill in final choice + rationale once PQ2 resolved.
+
+\lipsum[26]
+
+\begin{criticalinsight}
+  % TODO: Justify how the simulator choice affects the validity of conclusions
+  % (§6 Problem 1, §8.4 Risk row 4).
+\end{criticalinsight}
+
+% ─── 4.2 ROBOT MODEL ─────────────────────────────────────────
+\section{Robot Model}
+
+
+% TODO: Fill in once PQ1 resolved (TALOS / Unitree H1 / custom URDF).
+% Document: DOF count, actuation type (SEA / ideal torque),
+% sensor suite (IMU, joint encoders, foot F/T), URDF source.
+
+\begin{table}[htb]
+  \centering
+  
+  
+  \begin{tabularx}{\linewidth}{lX}
+    \toprule
+    \textbf{Property}   & \textbf{Value} \\
+    \midrule
+    Platform            & [TALOS / Unitree H1 / Custom] \\
+    Total DOF           & [28–32] \\
+    Actuation           & [Torque-controlled / SEA] \\
+    Base sensors        & IMU (1,kHz) \\
+    Joint sensors       & Encoders (1,kHz) \\
+    Foot sensors        & Force/torque (1,kHz) \\
+    URDF source         & [URL / repository] \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\lipsum[27]
+
+\begin{criticalinsight}
+  % TODO: Discuss URDF fidelity as a proxy for hardware accuracy
+  % (actuator model, damping, friction parameters).
+\end{criticalinsight}
+
+% ─── 4.3 SOFTWARE STACK ─────────────────────────────────────
+\section{Software Architecture}
+
+
+% Components (master_memory §8.2):
+%   - Pinocchio: rigid-body dynamics (RNEA, Jacobians, ABA)
+%   - OSQP / qpOASES: QP solver (warm-startable, real-time capable)
+%   - Crocoddyl: centroidal MPC (optional, tie to novelty question PQ4)
+%   - Simulator interface: Python bindings or C++ ROS2 node
+%   - ROS2: optional middleware layer
+
+% TODO: Insert software architecture diagram (figures/software_stack.pdf)
+
+\begin{figure}[htb]
+  \centering
+  \fbox{\rule{0pt}{4cm}\rule{8cm}{0pt}}  % placeholder
+  \caption{Software stack architecture. Real-time loop runs at 1,kHz;
+           MPC runs asynchronously at 1,kHz.}
+  
+\end{figure}
+
+\lipsum[28]
+
+\begin{criticalinsight}
+  % TODO: Discuss real-time constraints: QP solve time < 1 ms per cycle
+  % (master_memory §2.3). Benchmark solver against constraint.
+\end{criticalinsight}
+
+% ─── 4.4 CONTROL LOOP IMPLEMENTATION ────────────────────────
+\section{Control Loop Implementation}
+
+
+% Describe:
+%   - Sensor data acquisition → state estimation (EKF)
+%   - MPC update (asynchronous thread)
+%   - WBC QP formulation → solve → torque dispatch
+%   - Contact mode detection (threshold / probabilistic)
+
+\begin{verbatim}[H]
+  
+  
+  
+    Input: Sensor readings $(\q, \dq, \fc^{\mathrm{meas}})$, MPC reference $\xtask^{\mathrm{ref}}$
+    Output: Joint torques $\torque$
+     Estimate floating-base state via EKF: $\hat{\q}_b, \dot{\hat{\q}}_b$
+     Detect contact modes from foot force readings
+     Update contact Jacobian $\Jc$ and task Jacobians $\J_i$
+     Formulate QP \cref{eq:qp-cost}--\cref{eq:qp-friction}
+     Solve QP $\rightarrow$ $(\ddq^*, \torque^*, \fc^*)$
+     return $\torque^*$
+  
+\end{verbatim}
+
+\lipsum[29]
+
+% ─── 4.5 VALIDATION OF SIMULATION SETUP ─────────────────────
+\section{Validation of the Simulation Setup}
+
+
+% Validate against published benchmark scenarios before running S1–S5.
+% (master_memory §8.4 Risk row 4 mitigation).
+% e.g., reproduce a standing balance result from Koolen et al. (2016).
+
+\lipsum[30]
+
+\begin{criticalinsight}
+  % TODO: Identify which published results serve as ground truth for the
+  % simulation validation step, and justify the choice.
+\end{criticalinsight}

@@ -1,0 +1,90 @@
+% ============================================================
+% FIGURE: WBC Approaches Comparison Heatmap -- Ch2, Section 2.7
+% All coordinates hardcoded (no \pgfmathsetmacro, no \def macros)
+% rh=0.52cm  cw=1.85cm  rw=3.4cm
+% totalw=14.5cm  totaly=3.64cm
+% ============================================================
+
+\colorlet{scorehi}{green!55!black}
+\colorlet{scoremed}{orange!70!black}
+\colorlet{scorelo}{red!60!black}
+\colorlet{rowhi}{blue!8}
+
+\newcommand{\scoreH}{\textcolor{scorehi}{\textbf{\checkmark}}}
+\newcommand{\scoreM}{\textcolor{scoremed}{$\sim$}}
+\newcommand{\scoreL}{\textcolor{scorelo}{\texttimes}}
+
+\begin{tikzpicture}[
+	font=\scriptsize,
+	rowstyle/.style={anchor=west, text width=3.2cm, align=left},
+	scorestyle/.style={font=\small},
+	headerstyle/.style={rotate=40, anchor=south west, align=left}
+	]
+	
+	%% ── Constantes de mise en page ──
+	\def\RH{1.2cm}   % Hauteur de ligne
+	\def\CW{1.85cm}   % Largeur de colonne score
+	\def\RW{3.4cm}    % Largeur colonne libellés
+	\def\off{0.6cm}  % Centrage vertical du texte/score dans la ligne
+	
+	%% ── Entêtes ──
+	\begin{scope}[shift={(\RW, 8.5cm)}]
+		\node[headerstyle] at (0.0*\CW, 0) {Constraint\\satisfaction\\(hard)};
+		\node[headerstyle] at (1.0*\CW, 0) {Computational\\cost (low)};
+		\node[headerstyle] at (2.0*\CW, 0) {Multi-contact\\support};
+		\node[headerstyle] at (3.0*\CW, 0) {Real-time\\(1\,kHz)};
+		\node[headerstyle] at (4.0*\CW, 0) {Loco-manip.\\support};
+		\node[headerstyle] at (5.0*\CW, 0) {Evaluation\\protocol};
+	\end{scope}
+	
+	%% ── Macro pour les lignes ──
+	\newcommand{\myrow}[3]{
+		\fill[#3] (0, #1*\RH) rectangle (14.5cm, #1*\RH + \RH);
+		\node[rowstyle] at (0.1cm, #1*\RH + \off) {#2};
+	}
+	
+	%% ── Dessin des rangées (Index 0 en bas, 6 en haut) ──
+	\myrow{0}{Null-Space / Task-Priority \cite{Sentis2005}}{white}
+	\myrow{1}{QP-based WBC (single) \cite{Wensing2013}}{white}
+	\myrow{2}{Hierarchical QP (HQP) \cite{EscandeMansard2014}}{black!4}
+	\myrow{3}{Linear centroidal MPC \cite{Winkler2018}}{white}
+	\myrow{4}{Nonlinear centroidal MPC \cite{Caron2019}}{black!4}
+	\myrow{5}{RL-based \textit{(baseline)} \cite{Kumar2021}}{gray!6}
+	\myrow{6}{\textbf{Proposed: MPC + QP-WBC} \\ (this thesis)}{blue!5}
+	
+	%% ── Remplissage de TOUS les scores ──
+	\begin{scope}[scorestyle]
+		% Les positions X sont calculées pour être au milieu de chaque colonne
+		% Proposed (6)
+		\node at (4.32cm, 6*\RH+\off) {\scoreH}; \node at (6.17cm, 6*\RH+\off) {\scoreM}; \node at (8.02cm, 6*\RH+\off) {\scoreH}; \node at (9.87cm, 6*\RH+\off) {\scoreH}; \node at (11.72cm, 6*\RH+\off) {\scoreH}; \node at (13.57cm, 6*\RH+\off) {\scoreH};
+		
+		% RL-based (5)
+		\node at (4.32cm, 5*\RH+\off) {\scoreL}; \node at (6.17cm, 5*\RH+\off) {\scoreH}; \node at (8.02cm, 5*\RH+\off) {\scoreM}; \node at (9.87cm, 5*\RH+\off) {\scoreH}; \node at (11.72cm, 5*\RH+\off) {\scoreH}; \node at (13.57cm, 5*\RH+\off) {\scoreM};
+		
+		% Nonlinear MPC (4)
+		\node at (4.32cm, 4*\RH+\off) {\scoreH}; \node at (6.17cm, 4*\RH+\off) {\scoreL}; \node at (8.02cm, 4*\RH+\off) {\scoreH}; \node at (9.87cm, 4*\RH+\off) {\scoreL}; \node at (11.72cm, 4*\RH+\off) {\scoreM}; \node at (13.57cm, 4*\RH+\off) {\scoreL};
+		
+		% Linear MPC (3)
+		\node at (4.32cm, 3*\RH+\off) {\scoreM}; \node at (6.17cm, 3*\RH+\off) {\scoreH}; \node at (8.02cm, 3*\RH+\off) {\scoreM}; \node at (9.87cm, 3*\RH+\off) {\scoreM}; \node at (11.72cm, 3*\RH+\off) {\scoreL}; \node at (13.57cm, 3*\RH+\off) {\scoreL};
+		
+		% HQP (2)
+		\node at (4.32cm, 2*\RH+\off) {\scoreH}; \node at (6.17cm, 2*\RH+\off) {\scoreM}; \node at (8.02cm, 2*\RH+\off) {\scoreH}; \node at (9.87cm, 2*\RH+\off) {\scoreH}; \node at (11.72cm, 2*\RH+\off) {\scoreM}; \node at (13.57cm, 2*\RH+\off) {\scoreL};
+		
+		% QP-single (1)
+		\node at (4.32cm, 1*\RH+\off) {\scoreH}; \node at (6.17cm, 1*\RH+\off) {\scoreM}; \node at (8.02cm, 1*\RH+\off) {\scoreM}; \node at (9.87cm, 1*\RH+\off) {\scoreH}; \node at (11.72cm, 1*\RH+\off) {\scoreM}; \node at (13.57cm, 1*\RH+\off) {\scoreL};
+		
+		% Null-Space (0)
+		\node at (4.32cm, 0*\RH+\off) {\scoreL}; \node at (6.17cm, 0*\RH+\off) {\scoreH}; \node at (8.02cm, 0*\RH+\off) {\scoreL}; \node at (9.87cm, 0*\RH+\off) {\scoreH}; \node at (11.72cm, 0*\RH+\off) {\scoreL}; \node at (13.57cm, 0*\RH+\off) {\scoreL};
+	\end{scope}
+	
+	%% ── Grillage de finition ──
+	\foreach \i in {0,...,7} {
+		\draw[black!15, line width=0.3pt] (0, \i*\RH) -- (14.5cm, \i*\RH);
+	}
+	\draw[black!30, line width=0.7pt] (\RW, 0) -- (\RW, 7*\RH);
+	\foreach \j in {1,...,5} {
+		\draw[black!15, line width=0.3pt] (\RW + \j*\CW, 0) -- (\RW + \j*\CW, 7*\RH);
+	}
+	\draw[blue!60!black, line width=1.2pt] (0, 6*\RH) rectangle (14.5cm, 7*\RH);
+	
+\end{tikzpicture}

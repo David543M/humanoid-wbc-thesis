@@ -1,0 +1,36 @@
+% ─── APPENDIX B — Code Listings ──────────────────────────────
+\chapter{Code Listings}
+\label{app:code}
+
+% Paste key code snippets here (QP formulation, EKF, MPC interface).
+% Full code: see GitHub repository \url{https://github.com/David543M/humanoid-wbc-thesis}
+
+\section{QP Formulation (Python / Pinocchio)}
+
+\begin{lstlisting}[language=Python, caption={QP formulation skeleton using Pinocchio and OSQP.}]
+import pinocchio as pin
+import numpy as np
+import osqp
+import scipy.sparse as sp
+
+# TODO: Populate with actual implementation
+def build_wbc_qp(model, data, q, dq, task_refs, contact_modes):
+    """
+    Formulate the WBC QP.
+    Decision variable: z = [ddq (n+6), tau (n), fc (3*k)]
+    """
+    pass
+\end{lstlisting}
+
+\section{EKF State Estimator}
+
+\begin{lstlisting}[language=Python, caption={EKF base state estimator skeleton.}]
+# TODO: Populate with actual implementation
+class FloatingBaseEKF:
+    """Extended Kalman Filter for floating-base state estimation."""
+    def predict(self, imu_data, dt):
+        pass
+
+    def update(self, joint_pos, contact_flags, foot_forces):
+        pass
+\end{lstlisting}

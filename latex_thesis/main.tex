@@ -1,0 +1,290 @@
+% ============================================================
+%  MASTER'S THESIS — Whole-Body Control for Humanoid Robots
+%  Cranfield University | Official CUThesis2025 Template
+%  Author: David Maze
+%  Last sync: master_memory.md §12 (Chapter structure)
+% ============================================================
+
+\documentclass[12pt,oneside]{book}
+
+% ─── CRANFIELD OFFICIAL STYLE (2025) ────────────────────────
+% Handles: margins (3 cm), Times font (mathptmx), title pages
+% (×2 auto), Academic Integrity Declaration, fancyhdr (plain),
+% hyperref, graphicx, array, babel (british), tocbibind, setspace
+% Pre-declare xcolor options before CUThesis2025 loads it (prevents
+% "pdftex option already used" warning from dvipsnames being passed twice)
+\PassOptionsToPackage{dvipsnames}{xcolor}
+\usepackage{CUThesis2025}
+
+% ─── CRANFIELD METADATA ─────────────────────────────────────
+\title{Development and Simulation of a Whole-Body Control Framework for a Humanoid Robot}
+\author{David Maze}
+\date{September 2026}
+\faculty{\FEAS}
+\course{[Your MSc Programme Name]}    % e.g. Robotics / Autonomous Systems
+\degree{MSc}
+\supervisor{[Dr Supervisor Name]}
+% \associatesupervisor{[Name]}         % uncomment if applicable
+\academicyear{2025--2026}
+\copyrightyear{2026}
+\copyrightholder{Cranfield University}
+
+% ─── ENCODING ───────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+
+% ─── HYPERREF COLOUR OVERRIDE ───────────────────────────────
+% CUThesis2025 already loads hyperref; we only reconfigure colours
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!60!black,
+  citecolor  = green!50!black,
+  urlcolor   = red!60!black,
+}
+
+% ─── MATHS ──────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+
+% ─── GRAPHICS & FIGURES ─────────────────────────────────────
+% graphicx already loaded by CUThesis2025
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[dvipsnames]{xcolor}
+
+% ─── TIKZ / FIGURES ─────────────────────────────────────────
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{
+  shapes.geometric,
+  arrows.meta,
+  positioning,
+  fit,
+  backgrounds,
+  matrix,
+  decorations.pathreplacing,
+  calc
+}
+
+% ─── TABLES ─────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+% array already loaded by CUThesis2025
+
+% ─── ALGORITHMS ─────────────────────────────────────────────
+% \usepackage{algorithm}
+% \usepackage{algpseudocode}
+% ForEach shorthand (algpseudocode must be loaded first)
+% \algnewcommand\algorithmicforeach{\textbf{for each}}
+% \algdef{S}[FOR]{ForEach}[1]{\algorithmicforeach\ #1\ \textbf{do}}
+
+% ─── CODE LISTINGS ──────────────────────────────────────────
+\usepackage{listings}
+\lstset{
+  basicstyle   = \ttfamily\small,
+  breaklines   = true,
+  frame        = single,
+  numbers      = left,
+  numberstyle  = \tiny\color{gray},
+  commentstyle = \color{green!50!black},
+  keywordstyle = \color{blue!70!black}\bfseries,
+  stringstyle  = \color{red!70!black},
+}
+
+% ─── BIBLIOGRAPHY (natbib + IEEE) ───────────────────────────
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{IEEEtranN}
+
+% ─── CROSS-REFERENCING ──────────────────────────────────────
+% hyperref already loaded by CUThesis2025
+\usepackage[capitalise, noabbrev]{cleveref}
+
+% ─── CUSTOM THEOREM ENVIRONMENTS ────────────────────────────
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{assumption}{Assumption}[chapter]
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[chapter]
+
+% ─── CUSTOM BOXES (Critical Insight, Hypothesis, Gap) ───────
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable, skins}
+
+\newtcolorbox{criticalinsight}{
+  title        = {Critical Insight},
+  colback      = gray!8,
+  colframe     = blue!50!black,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  before upper = \small,
+}
+
+\newtcolorbox{hypothesis}[1]{
+  title        = {Hypothesis #1},
+  colback      = green!6,
+  colframe     = green!50!black,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+}
+
+\newtcolorbox{researchgap}{
+  title        = {Research Gap},
+  colback      = red!6,
+  colframe     = red!60!black,
+  coltitle     = white,
+  fonttitle    = \bfseries\small,
+  breakable,
+}
+
+% ─── CANONICAL NOTATION (§10 Key Definitions) ───────────────
+% All math macros wrapped in \ensuremath so they work in text AND math mode.
+% State & dynamics
+\newcommand{\q}{\ensuremath{\bm{q}}}                  % Generalized coordinates
+\newcommand{\dq}{\ensuremath{\dot{\bm{q}}}}           % Generalized velocities
+\newcommand{\ddq}{\ensuremath{\ddot{\bm{q}}}}         % Generalized accelerations
+\newcommand{\torque}{\ensuremath{\bm{\tau}}}           % Joint torques
+\newcommand{\M}{\ensuremath{\bm{M}(\q)}}              % Inertia matrix
+\newcommand{\Cg}{\ensuremath{\bm{C}(\q,\dq)\dq + \bm{g}(\q)}}  % Coriolis + gravity
+\newcommand{\J}{\ensuremath{\bm{J}}}                  % Jacobian matrix
+\newcommand{\Jc}{\ensuremath{\bm{J}_c}}               % Contact Jacobian
+\newcommand{\fc}{\ensuremath{\bm{f}_c}}               % Contact wrench (6D)
+\newcommand{\wrench}{\ensuremath{\bm{w}}}              % Generic wrench
+% CoM
+\newcommand{\com}{\ensuremath{\bm{p}_{\mathrm{CoM}}}} % Centre of Mass position
+\newcommand{\lmom}{\ensuremath{\bm{l}}}               % Linear momentum
+\newcommand{\amom}{\ensuremath{\bm{k}}}               % Angular momentum
+% Tasks
+\newcommand{\xtask}{\ensuremath{\bm{x}}}              % Task-space variable
+\newcommand{\dxtask}{\ensuremath{\dot{\bm{x}}}}
+\newcommand{\ddxtask}{\ensuremath{\ddot{\bm{x}}}}
+\newcommand{\xerr}{\ensuremath{\bm{e}}}               % Task-space error
+% QP
+\newcommand{\zqp}{\ensuremath{\bm{z}}}                % QP decision variable
+\newcommand{\Hqp}{\ensuremath{\bm{H}}}                % QP Hessian
+\newcommand{\cqp}{\ensuremath{\bm{c}}}                % QP linear term
+% Norms & operators
+\newcommand{\norm}[1]{\ensuremath{\left\lVert#1\right\rVert}}
+\newcommand{\transpose}{\ensuremath{^{\top}}}
+% Abbreviations (first use expanded in each chapter)
+\newcommand{\WBC}{Whole-Body Control (WBC)}
+\newcommand{\QP}{Quadratic Program (QP)}
+\newcommand{\MPC}{Model Predictive Control (MPC)}
+\newcommand{\DOF}{Degrees of Freedom (DOF)}
+\newcommand{\CoM}{Center of Mass (CoM)}
+\newcommand{\EKF}{Extended Kalman Filter (EKF)}
+
+% ─── MISC UTILITIES ─────────────────────────────────────────
+\usepackage{lipsum}       % Placeholder text — remove before final submission
+% Fix "marginparwidth < 2cm" warning from todonotes
+\setlength{\marginparwidth}{2cm}
+\usepackage{todonotes}    % \todo{} margin notes — remove before final submission
+\usepackage{pdfpages}     % Include external PDFs in appendices
+\usepackage{csquotes}     % \enquote{}
+\usepackage{enumitem}
+\setlist[itemize]{noitemsep, topsep=4pt}
+\setlist[enumerate]{noitemsep, topsep=4pt}
+
+% ─── LIST OF ABBREVIATIONS DATA ─────────────────────────────
+% Rendered via CUThesis2025 \begin{listofabbreviations} environment
+% (see front matter below)
+
+% ============================================================
+\begin{document}
+
+% ─── FRONT MATTER ───────────────────────────────────────────
+\frontmatter
+% Disable hyperref page anchors in front matter to avoid
+% "destination with same identifier" warnings (page.i, page.ii, etc.)
+\hypersetup{pageanchor=false}
+
+% \maketitle generates automatically:
+%   - Title page 1 (author / title / faculty / degree / supervisor / date)
+%   - Title page 2 (copyright statement + partial-fulfilment notice)
+%   - Academic Integrity Declaration (mandatory Cranfield page)
+\maketitle
+
+% Abstract — CUThesis2025 defines this as \chapter{Abstract}
+\begin{abstract}
+% TODO: Write abstract (≤ 300 words) covering:
+%  1. Context    — humanoid WBC as an unsolved coordination problem
+%  2. Gap        — no standard framework coupling planning + QP-WBC for loco-manipulation
+%  3. Method     — hierarchical: centroidal MPC planning + QP execution layer
+%  4. Validation — simulation-only (MuJoCo / Isaac Sim), scenarios S1–S5
+%  5. Results    — to be completed after experiments
+%  6. Contribution claim
+\lipsum[1]
+
+\begin{keywords}
+Whole-Body Control, Humanoid Robot, Quadratic Programming, Centroidal Dynamics,
+Model Predictive Control, Loco-manipulation, Simulation, Task-Priority Control.
+\end{keywords}
+\end{abstract}
+
+% Acknowledgements
+\chapter{Acknowledgements}
+% TODO: Write acknowledgements.
+\lipsum[2]
+
+% Table of Contents / Lists — singlespacing per Cranfield convention
+{
+\singlespacing
+\tableofcontents
+\listoffigures
+\listoftables
+}
+
+% List of Abbreviations — CUThesis2025 native environment
+\begin{listofabbreviations}
+\abbrev{CoM}{Center of Mass}
+\abbrev{DOF}{Degrees of Freedom}
+\abbrev{EKF}{Extended Kalman Filter}
+\abbrev{HQP}{Hierarchical Quadratic Program}
+\abbrev{IMU}{Inertial Measurement Unit}
+\abbrev{LCP}{Linear Complementarity Problem}
+\abbrev{LIP}{Linear Inverted Pendulum}
+\abbrev{MPC}{Model Predictive Control}
+\abbrev{QP}{Quadratic Program}
+\abbrev{RL}{Reinforcement Learning}
+\abbrev{SEA}{Series Elastic Actuator}
+\abbrev{TSID}{Task Space Inverse Dynamics}
+\abbrev{URDF}{Unified Robot Description Format}
+\abbrev{WBC}{Whole-Body Control}
+\end{listofabbreviations}
+
+% ─── MAIN MATTER ────────────────────────────────────────────
+\mainmatter
+\hypersetup{pageanchor=true}  % Re-enable page anchors for numbered chapters
+\doublespacing    % Cranfield standard body text spacing
+
+\include{chapters/ch1_introduction}
+\include{chapters/ch2_sota}
+\include{chapters/ch3_methodology}
+\include{chapters/ch4_simulation_framework}
+\include{chapters/ch5_experiments}
+\include{chapters/ch6_discussion}
+\include{chapters/ch7_conclusion}
+
+% ─── BACK MATTER ────────────────────────────────────────────
+\backmatter
+\singlespacing
+
+\bibliography{references}
+
+\appendix
+\include{appendices/appendix_a_math}
+\include{appendices/appendix_b_code}
+
+\end{document}

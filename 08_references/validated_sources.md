@@ -9,12 +9,13 @@
 
 | Category | Count |
 |----------|-------|
-| ✅ Fully verified | 14 |
-| ⚠️ Verified with metadata correction needed | 5 |
-| ❌ NOT FOUND — likely AI-generated placeholders | 7 |
-| 🔲 Not yet searched (minor/toolchain refs) | 3 |
+| ✅ Fully verified | 29 |
+| ⚠️ Content re-read pending (DOI confirmed) | 2 |
+| ❌ NOT FOUND — AI-generated, removed | 7 |
+| 🔲 Not yet searched | 0 |
 
-> ⚠️ CRITICAL: 7 sources appear to be AI-generated placeholder citations with no matching real publication. These MUST be removed from references.bib and Chapter 2 before any supervisor review or submission.
+> ⚠️ CRITICAL (2026-04-30): 7 sources appear to be AI-generated placeholder citations. REMOVED from references.bib and Chapter 2.
+> ✅ UPDATE 2026-05-04: All remaining corrections applied. 29/31 sources fully verified. 2 content re-reads pending (Romualdi2023, Elobaid2023) — non-blocking.
 
 ---
 
@@ -37,13 +38,16 @@
 | Pinocchio | The Pinocchio C++ Library | J. Carpentier et al. | IEEE/SICE SII, pp. 614–619 | 2019 | 10.1109/SII.2019.8700380 | Confirmed. Backbone of Crocoddyl, Stack-of-Tasks. |
 | Crocoddyl | Crocoddyl: An Efficient and Versatile Framework for Multi-Contact Optimal Control | C. Mastalli et al. | IEEE ICRA | 2020 | 10.1109/ICRA40945.2020.9196673 | Confirmed via arXiv:1909.04947. |
 | Wensing2023Review | Optimization-Based Control for Dynamic Legged Robots | P. M. Wensing, M. Posa, Y. Hu, A. Escande, N. Mansard, A. Del Prete | IEEE T-RO, Vol. 40, pp. 43–63 | 2023/2024 | 10.1109/TRO.2023.3324580 | Confirmed via IEEE Xplore + LAAS HAL. Published Vol. 40 (2024), DOI registered 2023. |
-| Smaldone2025 | A Feasibility-Driven MPC Scheme for Robust Gait Generation in Humanoids | N. Scianca, F. M. Smaldone, L. Lanari, G. Oriolo | Robotics and Autonomous Systems (ScienceDirect) | 2025 | — | Confirmed via ScienceDirect. ⚠️ BibKey name matches but check authors in bib — bib lists Smaldone as first author; actual first author is Scianca. |
-| PolySim2025 | PolySim: Bridging the Sim-to-Real Gap for Humanoid Control via Multi-Simulator Dynamics Randomization | PolySim Contributors | arXiv:2510.01708 | 2025 | arXiv:2510.01708 | Confirmed via arXiv. ⚠️ Title in bib is WRONG: bib says "Multi-Physics Simulation Harness" — must be corrected to actual title. |
-| Sferrazza2024 | HumanoidBench: Simulated Humanoid Benchmark for Whole-Body Locomotion and Manipulation | C. Sferrazza, D.-M. Huang, X. Lin, Y. Lee, P. Abbeel | arXiv:2403.10506 / RSS 2024 | 2024 | arXiv:2403.10506 | Confirmed. ⚠️ Bib title has "Benchmarks" (plural) — correct to "Benchmark" (singular). Add full authors and venue RSS 2024. |
-| Sleiman2021 | A Unified MPC Framework for Whole-Body Dynamic Locomotion and Manipulation | J.-P. Sleiman, F. Farshidian, M. V. Minniti, M. Hutter | IEEE RA-L, Vol. 6, No. 3, pp. 4688–4695 | 2021 | 10.1109/LRA.2021.3068908 | Confirmed via IEEE Xplore + arXiv:2103.00946. ⚠️ VENUE CORRECTION: bib uses @inproceedings with IROS — actual venue is IEEE RA-L (journal). Change to @article. |
-| Romualdi2023 | Online Non-linear Centroidal MPC for Humanoid Robot Locomotion with Step Adjustment | G. Romualdi et al. | IEEE RA-L | 2023 | 10.1109/LRA.2023.3273393 | Partially confirmed (DOI exists on IEEE). Full content re-read pending. |
-| Elobaid2023 | Online DCM Trajectory Generation for Push Recovery of Torque-Controlled Humanoid Robots | M. Elobaid et al. | IEEE RA-L | 2023 | 10.1109/LRA.2023.3289866 | Partially confirmed (DOI exists on IEEE). Full content re-read pending. |
-| MuJoCo2012 | MuJoCo: A Physics Engine for Model-Based Control | E. Todorov, T. Erez, Y. Tassa | IEEE IROS, pp. 5026–5033 | 2012 | 10.1109/IROS.2012.6386109 | High confidence — this is the canonical MuJoCo paper, widely cited. Full verification pending. |
+| Smaldone2025 | A Feasibility-Driven MPC Scheme for Robust Gait Generation in Humanoids | N. Scianca, F. M. Smaldone, L. Lanari, G. Oriolo | Robotics and Autonomous Systems (Elsevier) | 2025 | 10.1016/j.robot.2025.104430 | ✅ FIXED 2026-05-04 — venue corrected IEEE T-RO→RAS Elsevier; DOI confirmed; Scianca first author corrected in bib. |
+| PolySim2025 | PolySim: Bridging the Sim-to-Real Gap for Humanoid Control via Multi-Simulator Dynamics Randomization | PolySim Contributors | arXiv:2510.01708 | 2025 | arXiv:2510.01708 | ✅ FIXED 2026-04-30 — title corrected in bib. |
+| Sferrazza2024 | HumanoidBench: Simulated Humanoid Benchmark for Whole-Body Locomotion and Manipulation | C. Sferrazza, D.-M. Huang, X. Lin, Y. Lee, P. Abbeel | arXiv:2403.10506 / RSS 2024 | 2024 | arXiv:2403.10506 | ✅ FIXED 2026-04-30 — title, authors, venue corrected in bib. |
+| Sleiman2021 | A Unified MPC Framework for Whole-Body Dynamic Locomotion and Manipulation | J.-P. Sleiman, F. Farshidian, M. V. Minniti, M. Hutter | IEEE RA-L, Vol. 6, No. 3, pp. 4688–4695 | 2021 | 10.1109/LRA.2021.3068908 | ✅ FIXED 2026-04-30 — @inproceedings→@article, venue IROS→RA-L corrected in bib. |
+| Romualdi2023 | Online Non-linear Centroidal MPC for Humanoid Robot Locomotion with Step Adjustment | G. Romualdi et al. | IEEE RA-L (extended from ICRA 2022 arXiv:2203.04489) | 2023 | 10.1109/LRA.2023.3273393 | DOI format LRA confirmed. Content re-read pending (non-blocking). |
+| Elobaid2023 | Online DCM Trajectory Generation for Push Recovery of Torque-Controlled Humanoid Robots | M. Elobaid et al. | IEEE RA-L (extended from ICRA 2020) | 2023 | 10.1109/LRA.2023.3289866 | DOI format LRA confirmed. Content re-read pending (non-blocking). |
+| MuJoCo2012 | MuJoCo: A Physics Engine for Model-Based Control | E. Todorov, T. Erez, Y. Tassa | IEEE IROS, pp. 5026–5033 | 2012 | 10.1109/IROS.2012.6386109 | ✅ VERIFIED 2026-05-04 — IEEE Xplore document 6386109 confirmed. Canonical MuJoCo paper. |
+| HumanoidGym2024 | Humanoid-Gym: Reinforcement Learning for Humanoid Robot with Zero-Shot Sim2Real Transfer | X. Gu, Y.-J. Wang, J. Chen | arXiv:2404.05695 | 2024 | arXiv:2404.05695 | ✅ VERIFIED 2026-05-04 — authors corrected in bib (was "Contributors" placeholder). RobotEra toolkit. |
+| Kumar2021 | RMA: Rapid Motor Adaptation for Legged Robots | A. Kumar, Z. Fu, D. Pathak, J. Malik | RSS 2021 | 2021 | 10.15607/RSS.2021.XVII.011 | ✅ VERIFIED 2026-05-04 — arXiv:2107.04034; RSS 2021 programme confirmed. Validated on A1 quadruped. |
+| Smaldone2022 | From Walking to Running: 3D Humanoid Gait Generation via MPC | F. M. Smaldone, N. Scianca, L. Lanari, G. Oriolo | Frontiers in Robotics and AI | 2022 | 10.3389/frobt.2022.876613 | ✅ FIXED 2026-05-04 — BibKey renamed Pajon2022→Smaldone2022; cite{} in Ch2 updated. Paper verified PMC. |
 
 ---
 

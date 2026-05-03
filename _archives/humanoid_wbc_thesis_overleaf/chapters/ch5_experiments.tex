@@ -1,0 +1,147 @@
+% ============================================================
+%  CHAPTER 5 — Experiments and Results
+%  Logical chain: Validation → Results → Comparison
+%  Status: Not started | Metrics placeholders (PQ6)
+% ============================================================
+
+\chapter{Experiments and Results}
+\label{chap:experiments}
+
+% Opening: restate evaluation goals; connect to H1, H2, H3.
+% Remind the reader that all experiments are simulation-only (scope, §1.5).
+
+\lipsum[31]
+
+% ─── 5.1 EXPERIMENTAL SETUP ─────────────────────────────────
+\section{Experimental Setup}
+\label{sec:exp-setup}
+
+% Summarize simulator, robot model, control parameters.
+% Reference Ch. 4 — do not repeat details, only add what is needed for
+% experiment reproducibility.
+
+\lipsum[32]
+
+% ─── 5.2 METRICS ────────────────────────────────────────────
+\section{Evaluation Metrics}
+\label{sec:metrics}
+
+% All thresholds (X, Y, Z) to be grounded in cited literature (PQ6).
+% Until resolved, keep as parameters.
+
+\begin{table}[htb]
+  \centering
+  \caption{Evaluation metrics (thresholds to be grounded in literature, PQ6).}
+  \label{tab:metrics}
+  \begin{tabularx}{\linewidth}{llXl}
+    \toprule
+    \textbf{Metric} & \textbf{Symbol} & \textbf{Definition} & \textbf{Target} \\
+    \midrule
+    CoM tracking error       & $e_{\mathrm{CoM}}$   & RMSE of $\com$ vs.\ reference & $< X$~cm \\
+    Contact force compliance  & $\eta_{\mathrm{FC}}$ & Fraction of time inside friction cone & $> 95\%$ \\
+    Task success rate         & $\eta_{\mathrm{task}}$ & \% of trials completing target task & $> Y\%$ \\
+    QP solve time             & $t_{\mathrm{QP}}$    & Mean/max per control cycle & $<1,kHz$ \\
+    Perturbation recovery     & $\eta_{\mathrm{rec}}$ & Recovery rate after impulse & TBD \\
+    End-effector error        & $e_{\mathrm{EE}}$    & Position RMSE during manipulation & $< Z$~cm \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ─── 5.3 BASELINES ──────────────────────────────────────────
+\section{Baselines}
+\label{sec:baselines}
+
+\begin{enumerate}
+  \item \textbf{Null-space Task-Priority WBC} — classical Sentis \& Khatib formulation~\cite{Sentis2005}; no inequality constraint handling.
+  \item \textbf{PD Joint Control} — decentralized joint-level PD; no whole-body coordination.
+  \item \textbf{RL Policy} — pre-trained locomotion policy (e.g., Unitree H1 RL); used as agility upper-bound reference only.
+\end{enumerate}
+
+% ─── 5.4 SCENARIO S1 — STATIC BALANCING ─────────────────────
+\section{S1: Static Balancing}
+\label{sec:s1}
+
+% Primary metric: CoM error, recovery time.
+% Test: standing still under external pushes.
+
+\lipsum[33]
+
+\begin{table}[htb]
+  \centering
+  \caption{S1 — Static balancing results.}
+  \label{tab:s1-results}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Method} & $e_{\mathrm{CoM}}$ (cm) & $\eta_{\mathrm{FC}}$ (\%) & $t_{\mathrm{QP}}$ (ms) \\
+    \midrule
+    Proposed WBC     & --- & --- & --- \\
+    Task-Priority WBC & --- & --- & --- \\
+    PD Control       & --- & --- & --- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{criticalinsight}
+  % TODO: Discuss if static balancing reveals any unexpected constraint
+  % infeasibility or QP conditioning issues.
+\end{criticalinsight}
+
+% ─── 5.5 SCENARIO S2 — FLAT-GROUND WALKING ──────────────────
+\section{S2: Flat-Ground Walking}
+\label{sec:s2}
+
+\lipsum[34]
+
+\begin{criticalinsight}
+  % TODO: Discuss CoM tracking performance during contact transitions.
+\end{criticalinsight}
+
+% ─── 5.6 SCENARIO S3 — STAIR CLIMBING ───────────────────────
+\section{S3: Stair Climbing}
+\label{sec:s3}
+
+\lipsum[35]
+
+\begin{criticalinsight}
+  % TODO: Foot clearance and contact force analysis.
+\end{criticalinsight}
+
+% ─── 5.7 SCENARIO S4 — LOCO-MANIPULATION ───────────────────
+\section{S4: Loco-Manipulation}
+\label{sec:s4}
+
+% Key scenario for H1 validation: simultaneous locomotion + manipulation.
+% Metrics: end-effector error + CoM tracking.
+
+\lipsum[36]
+
+\begin{criticalinsight}
+  % TODO: Quantify the coupling effect between locomotion and manipulation tasks.
+  % Does task-priority assignment degrade either task? By how much?
+\end{criticalinsight}
+
+% ─── 5.8 SCENARIO S5 — PERTURBATION ROBUSTNESS ─────────────
+\section{S5: Perturbation Robustness}
+\label{sec:s5}
+
+\lipsum[37]
+
+\begin{criticalinsight}
+  % TODO: Define the perturbation protocol precisely for reproducibility.
+  % (Addresses §7.1 evaluation gap — perturbation protocols rarely reported.)
+\end{criticalinsight}
+
+% ─── 5.9 COMPARATIVE ANALYSIS ───────────────────────────────
+\section{Comparative Analysis}
+\label{sec:comparative}
+
+% Synthesize results across all scenarios and baselines.
+% Do NOT simply list numbers — argue what the data shows.
+
+\lipsum[38]
+
+\begin{criticalinsight}
+  % TODO: Address anticipated reviewer criticism:
+  % "RL baselines would outperform your WBC" — frame as expected (§18).
+  % "Evaluation scenarios are too simple" — justify with loco-manipulation + perturbation.
+\end{criticalinsight}
