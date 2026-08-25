@@ -650,6 +650,7 @@ def main():
     print("=" * 66)
     if a.save:
         np.savez(a.save, com_err=ce, xi_err=xe, ctrl_ms=cm, t_steps=ts,
+                 e_mech=c.E_mech, e_sq=c.E_sq, mass=c.mass,
                  land_wobble=lw, land_grf=lg, land_mkbrk=lmb,
                  softland=a.softland, slramp=a.slramp, tramp=a.tramp,
                  floortc=a.floortc, zlk=a.zlk, zlmin=a.zlmin,

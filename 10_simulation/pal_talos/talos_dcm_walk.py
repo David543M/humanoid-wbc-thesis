@@ -285,7 +285,12 @@ class DCMWalk(W.WBC):
         except Exception:
             tau=np.array([h[dof] for dof in self.act_dofs])+W.KP_POS*(self.home-qcur)-W.KD_POS*vcur
             self._qp_fail=getattr(self,"_qp_fail",0)+1
-        d.ctrl[:]=np.clip(tau,self.tau_min,self.tau_max)
+        tau = np.clip(tau, self.tau_min, self.tau_max)
+        # --- accumulation energetique (ajout 2026-08-25, inerte) --------------
+        _dt = m.opt.timestep
+        self.E_mech += abs(float(tau @ vcur)) * _dt
+        self.E_sq   += float(tau @ tau) * _dt
+        d.ctrl[:] = tau
 
     def contact_jac_feet(self, feet):
         m,d=self.m,self.d; rows=[]

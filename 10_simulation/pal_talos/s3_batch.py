@@ -104,7 +104,8 @@ def main():
         row = dict(seed=s, status=status, wall_s=wall, success=False, upright=False,
                    reached_top=False, state="?", n_climbed=-1, mi=-1, n_moves=-1,
                    dist=np.nan, climb=np.nan, fell_at=np.nan, grf_pic=np.nan,
-                   clear_min=np.nan, ctrl_mean=np.nan, ctrl_p99=np.nan, qp_feas=np.nan)
+                   clear_min=np.nan, ctrl_mean=np.nan, ctrl_p99=np.nan, qp_feas=np.nan,
+                   e_mech=np.nan, e_sq=np.nan, cot=np.nan)
         if status == "ok" and os.path.exists(npz_path):
             try:
                 d = np.load(npz_path, allow_pickle=False)
@@ -123,6 +124,10 @@ def main():
                            ctrl_mean=float(cmv.mean()) if cmv.size else np.nan,
                            ctrl_p99=float(np.percentile(cmv, 99)) if cmv.size else np.nan,
                            qp_feas=100.0 * (1.0 - nq / nt))
+                _em, _dd = float(d["e_mech"]), float(d["dist"])
+                _ms = float(d["mass"])
+                row.update(e_mech=_em, e_sq=float(d["e_sq"]),
+                           cot=_em / (_ms * 9.81 * _dd) if _dd > 0.1 else np.nan)
             except Exception as e:
                 row["status"] = "npz_error:%s" % e
         elif status == "ok":                     # process sorti sans npz = CRASH

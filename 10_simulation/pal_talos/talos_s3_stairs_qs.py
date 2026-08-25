@@ -416,6 +416,7 @@ def main():
         # et du controleur (aucune ligne de control()/update() touchee). La config gelee
         # du succes 3/3 (QS #5c + w_foot_stance=1400) reste intacte.
         np.savez(a.save, clear=cl, grf=gr, ctrl_ms=cm, dist=dist, climb=climb,
+                 e_mech=c.E_mech, e_sq=c.E_sq, mass=c.mass,
                  n_climbed=n_climbed, max_climb=c._maxclimb, success=success,
                  fell_at=fell_at or -1.0, hriser=a.hriser,
                  upright=upright, reached_top=reached_top, state=c.state,
