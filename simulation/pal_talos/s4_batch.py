@@ -91,7 +91,8 @@ def main():
         row = dict(seed=s, status=status, wall_s=wall, success_func=False, success_strict=False,
                    done=False, upright=False, box_held=False, dist=np.nan,
                    com_rmse_mm=np.nan, ee_rmse_mm=np.nan, ee_pic_mm=np.nan,
-                   grf_pic=np.nan, ctrl_mean=np.nan, ctrl_p99=np.nan)
+                   grf_pic=np.nan, ctrl_mean=np.nan, ctrl_p99=np.nan,
+                   e_mech=np.nan, e_sq=np.nan, cot=np.nan)
         if status == "ok" and os.path.exists(npz_path):
             try:
                 d = np.load(npz_path)
@@ -106,6 +107,10 @@ def main():
                            ee_pic_mm=float(np.nanmax(ee_walk)) * 1e3 if ee_walk.size else np.nan,
                            grf_pic=float(np.nanmax(d["grf"])),
                            ctrl_mean=float(cm.mean()), ctrl_p99=float(np.percentile(cm, 99)))
+                _em, _dd = float(d["e_mech"]), float(d["dist"])
+                _ms = float(d["mass"])
+                row.update(e_mech=_em, e_sq=float(d["e_sq"]),
+                           cot=_em / (_ms * 9.81 * _dd) if _dd > 0.1 else np.nan)
             except Exception as e:
                 row["status"] = "npz_error:%s" % e
         elif status == "ok":

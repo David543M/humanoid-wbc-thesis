@@ -81,7 +81,8 @@ def main():
         row = dict(seed=s, status=status, wall_s=wall, success=False, dist=np.nan,
                    fell_at=np.nan, rmse_mm=np.nan, tstep_mean=np.nan,
                    wob_pic=np.nan, grf_pic=np.nan, mkbrk=np.nan,
-                   ctrl_mean=np.nan, ctrl_p99=np.nan)
+                   ctrl_mean=np.nan, ctrl_p99=np.nan,
+                   e_mech=np.nan, e_sq=np.nan, cot=np.nan)
         if status == "ok" and os.path.exists(npz_path):
             try:
                 d = np.load(npz_path)
@@ -91,6 +92,10 @@ def main():
                            rmse_mm=float(np.sqrt(np.nanmean(ce ** 2)) * 1e3),
                            tstep_mean=float(d["t_steps"].mean()) if d["t_steps"].size else np.nan,
                            ctrl_mean=float(cm.mean()), ctrl_p99=float(np.percentile(cm, 99)))
+                _em, _dd = float(d["e_mech"]), float(d["dist"])
+                _ms = float(d["mass"])
+                row.update(e_mech=_em, e_sq=float(d["e_sq"]),
+                           cot=_em / (_ms * 9.81 * _dd) if _dd > 0.1 else np.nan)
                 if d["land_wobble"].size:
                     row.update(wob_pic=float(d["land_wobble"].max()),
                                grf_pic=float(d["land_grf"].max()),

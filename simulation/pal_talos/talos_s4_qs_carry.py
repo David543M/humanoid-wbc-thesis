@@ -267,7 +267,12 @@ class S4CarryQS(QS.StairQS):
         except Exception:
             tau = np.array([h[dof] for dof in self.act_dofs]) + W.KP_POS * (self.home - qcur) - W.KD_POS * vcur
             self._qp_fail = getattr(self, "_qp_fail", 0) + 1
-        d.ctrl[:] = np.clip(tau, self.tau_min, self.tau_max)
+        tau = np.clip(tau, self.tau_min, self.tau_max)
+        # --- accumulation energetique (ajout 2026-08-25, inerte) --------------
+        _dt = m.opt.timestep
+        self.E_mech += abs(float(tau @ vcur)) * _dt
+        self.E_sq   += float(tau @ tau) * _dt
+        d.ctrl[:] = tau
         # ### S4 : logs
         self.log["ee_L"].append(e_ee["L"]); self.log["ee_R"].append(e_ee["R"])
         self.log["ee_regime"].append(self._regime())
@@ -417,6 +422,7 @@ def main():
     print("=" * 72)
     if a.save:
         np.savez(a.save, ee_L=eeL, ee_R=eeR, ee_regime=reg, ctrl_ms=cm, grf=gr, com_err=cerr,
+                 e_mech=c.E_mech, e_sq=c.E_sq, mass=c.mass,
                  dist=dist, box_z=box_z, box_held=box_held, payload=a.payload, w_ee=a.wee,
                  success=success, success_func=success_func, done=bool(c.state == "DONE"),
                  upright=upright, fell_at=fell_at if fell_at is not None else -1.0,
