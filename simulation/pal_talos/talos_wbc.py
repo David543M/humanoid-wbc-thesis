@@ -194,6 +194,13 @@ def fill_fullM(m, d, dst):
 class WBC:
     def __init__(self, m, d, corners=None, hip=False):
         self.m, self.d = m, d
+        # --- instrumentation energetique (ajout 2026-08-25) ---------------------
+        # Compteurs d'integrale. Ecrits en fin de control(), APRES le clip et donc
+        # sur le couple reellement applique. Relus par AUCUN chemin de controle :
+        # strictement inertes vis-a-vis de la dynamique et de la config gelee.
+        self.E_mech = 0.0                    # int |tau . qdot| dt   [J]
+        self.E_sq   = 0.0                    # int ||tau||^2   dt   [N^2 m^2 s]
+        self.mass   = float(mujoco.mj_getTotalmass(m))   # [kg], pour le CoT
         self._corners_model = corners if corners is not None else CORNERS_LEGACY
         self.hip = hip                   # levier hanche (S1 uniquement, defaut OFF)
         self._hip_active = False
@@ -366,6 +373,10 @@ class WBC:
                 + KP_POS * (self.home - qcur) - KD_POS * vcur
             self._qp_fail = getattr(self, "_qp_fail", 0) + 1
         tau = np.clip(tau, self.tau_min, self.tau_max)
+        # --- accumulation energetique (inerte) --------------------------------
+        _dt = m.opt.timestep                 # 1 control() par mj_step : pas de decimation
+        self.E_mech += abs(float(tau @ vcur)) * _dt
+        self.E_sq   += float(tau @ tau) * _dt
         d.ctrl[:] = tau
         return tau
 
