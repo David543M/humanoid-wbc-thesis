@@ -29,7 +29,11 @@ relatively and need no change.
 - `s*_batch/*_report.md`, `*_rows.csv` - campaign results as reported
 - `*_design.md`, `*_diagnosis.md` - design and diagnostic notes
 
-Large batch artefacts (`.npz`), videos and slides are deliberately excluded.
+- `videos/` - screen captures of one run of each scenario, with thumbnails
+
+Large batch artefacts (`.npz`) and slides are deliberately excluded. The five
+scenario videos are mirrored on YouTube for convenience:
+<https://youtube.com/playlist?list=PLGPFWyAgfJ08>
 
 ## Requirements
 
