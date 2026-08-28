@@ -1,159 +1,80 @@
-# Humanoid WBC Thesis
+# Whole-Body Control for a Humanoid Robot — evaluated pipeline
 
-> **Development and Simulation of a Whole-Body Control Framework for a Humanoid Robot**
-> Master's Thesis — David — 2026
+Simulation code, robot model and campaign reports for the MSc thesis
+**Development and Simulation of a Whole-Body Control Framework for a Humanoid Robot**
+(Cranfield University, 2026).
 
-[![Status](https://img.shields.io/badge/status-Literature%20Review-yellow)](https://github.com/David543M/humanoid-wbc-thesis)
-[![Simulator](https://img.shields.io/badge/simulator-MuJoCo%20%7C%20Isaac%20Sim-blue)](https://github.com/David543M/humanoid-wbc-thesis)
-[![Framework](https://img.shields.io/badge/framework-QP--based%20WBC-green)](https://github.com/David543M/humanoid-wbc-thesis)
-[![GitHub](https://img.shields.io/badge/GitHub-David543M%2Fhumanoid--wbc--thesis-black?logo=github)](https://github.com/David543M/humanoid-wbc-thesis)
+This repository is the reproducibility artefact cited in Appendix A of the thesis.
+It contains the controller, the MuJoCo model and scenes, the aggregated results
+behind every reported figure, and a screen capture of one run of each scenario.
+It is a snapshot taken at submission.
 
----
+## What is here
 
-## Research Question
+Everything lives under [`simulation/pal_talos/`](simulation/pal_talos/).
+The path is kept as the thesis prints it.
 
-> *How can a whole-body control framework be designed and validated in simulation to enable a humanoid robot to perform stable, multi-contact locomotion and manipulation tasks under dynamic constraints?*
+| | |
+|---|---|
+| `talos_wbc.py` | The QP-WBC executor: full floating-base dynamics as a hard equality, 6D no-slip contact per stance foot, unilaterality, friction pyramid, actuation bounds. Solved with ProxQP at 1 kHz. |
+| `talos_dcm_walk.py`, `talos_dcm_walk_timing.py` | Analytic DCM reference generator with reactive step timing (S2, S5). |
+| `talos_s3_stairs.py`, `talos_s3_stairs_qs.py` | Stair climbing: the event-timed attempt, then the quasi-static weight-transfer sequencer that replaced it (S3). |
+| `talos_s4_qs_carry.py` | Two-handed carry over the quasi-static sequencer (S4). |
+| `talos_s5_perturb.py` | Directional impulse sweep (S5). |
+| `centroidal_mpc.py`, `lipm_mpc.py` | The centroidal MPC planning layer. Implemented, evaluated in isolation, and **not** used in any reported campaign; it is reported as a negative result. |
+| `s?_batch.py`, `s1_baselines.py` | Batch drivers. Each emits a report and a row set per campaign. |
+| `probe_*.py`, `qp_*.py`, `s2_determinism.py` | The diagnostic probes behind the threats-to-validity section. |
+| `*.xml`, `assets/` | MuJoCo model and scenes (TALOS, from `mujoco_menagerie`). |
+| `s?_batch*/` | Aggregated campaign results: one report and one row set each. |
+| `videos/` | One screen capture per scenario, with a still frame. |
+| `RESULTS.md`, `EXECUTORS.md`, `*_note.md`, `*_diagnosis.md` | Working records for the campaigns and diagnoses. |
 
----
+Raw per-trial archives are **not** included. They run to several hundred megabytes
+and are reproducible from the drivers and the frozen configurations recorded in
+Appendix A.
 
-## Overview
+## What the campaigns returned
 
-This repository organizes the full research workflow of the Master's thesis, from problem definition to publication-grade manuscript. The work proposes a **hierarchical WBC architecture**: a centroidal MPC planning layer coupled with a QP-based Quadratic Program execution layer, validated across five simulation scenarios (S1–S5) on a humanoid URDF model.
+Under the shared verdict rule (the Wilson 95% lower bound must exceed the target,
+not the point estimate):
 
-The research pipeline combines a multi-LLM workflow (Perplexity, Gemini, Claude) with adversarial and council analysis, targeted gap-filling, simulation development, and structured academic writing aimed at publication-level quality.
+| Scenario | Result | |
+|---|---|---|
+| S1 static balancing | 50/50 | **pass** |
+| S2 flat-ground walking | 35/50 | fail |
+| S3 stair climbing | 10/35 | fail |
+| S4 loco-manipulation (2 kg) | 6/30 | fail |
+| S5 perturbation robustness | directional margin | measured, not a rate |
 
----
+The executor QP was 100% feasible in every scenario, including in trials that
+ended in a fall. The reported fragility is in the reduced-order planning layer,
+not in the whole-body optimisation. One scenario passes; the thesis reports the
+other four as they came out.
 
-## Thesis Chapters
+## Running it
 
-| Chapter | Title | Status |
-|---------|-------|--------|
-| 1 | Introduction | 🔲 Not started |
-| 2 | State of the Art — WBC for Humanoids | 🔲 Not started |
-| 3 | Methodology | 🔲 Not started |
-| 4 | Simulation Framework | 🔲 Not started |
-| 5 | Experiments and Results | 🔲 Not started |
-| 6 | Discussion | 🔲 Not started |
-| 7 | Conclusion and Future Work | 🔲 Not started |
-
----
-
-## Technical Stack (Planned)
-
-| Component | Tool |
-|-----------|------|
-| Dynamics library | [Pinocchio](https://github.com/stack-of-tasks/pinocchio) |
-| Optimal control | [Crocoddyl](https://github.com/loco-3d/crocoddyl) |
-| QP solver | OSQP / qpOASES |
-| Simulator | MuJoCo or NVIDIA Isaac Sim (TBD) |
-| Robot model | TALOS or Unitree H1 URDF (TBD) |
-| Language | Python / C++ |
-
----
-
-## Test Scenarios
-
-| ID | Description | Primary Metric |
-|----|-------------|----------------|
-| S1 | Static balancing under external pushes | CoM error, recovery time |
-| S2 | Flat-ground walking (3 m) | Task success, CoM tracking |
-| S3 | Stair climbing (3 steps) | Foot clearance, contact forces |
-| S4 | Loco-manipulation (walk + reach) | End-effector error + CoM tracking |
-| S5 | Perturbation robustness | Recovery rate |
-
----
-
-## Repository Structure
-
-```
-humanoid-wbc-thesis/
-├── 00_problem_definition/     # Research question, scope boundaries, hypotheses
-├── 01_prompts/                # Canonical LLM prompts (versioned for reproducibility)
-├── 02_raw_research/           # Raw LLM outputs, PDFs — read-only once archived
-├── 03_processed/              # Summaries, extracted claims, taxonomy, knowledge graph
-├── 04_council_analysis/       # Contradictions, consensus, gaps, confidence scores
-├── 05_targeted_research/      # Second-pass gap-filling research
-├── 06_writing/                # Outline → drafts → final chapters
-├── 07_review/                 # Adversarial review, supervisor feedback, revisions
-├── 08_references/             # BibTeX, validated sources, Zotero exports
-├── 09_appendices/             # Frozen code, figures, datasets for manuscript
-├── 10_simulation/             # URDF models, simulator configs, controller source
-├── 11_experiments/            # Experiment logs, plots, tabulated results
-├── 12_meetings/               # Supervisor meeting notes and action items
-├── 13_logbook/                # Daily research journal
-└── master_memory.md           # Single source of truth — read before any work session
+```bash
+conda env create -f simulation/pal_talos/environment.yml
+conda activate talos-wbc
+cd simulation/pal_talos
+python talos_dcm_walk_timing.py     # a single S2 run
+python s2_batch.py                  # the seed-level campaign
 ```
 
----
+`environment.yml` records the exact dependency closure that produced the reported
+numbers. It matters more here than it usually would, because outcomes are decided
+by sub-epsilon numerical events: per-seed labels are **not** bit-reproducible, and
+the reproducible unit is the aggregate rate with its interval, not the individual
+trajectory. Appendix A of the thesis explains why.
 
-## Research Workflow
+## Videos
 
-1. **Define** (`00_`) — research question, scope, hypotheses
-2. **Prompt** (`01_`) — author and version LLM prompts
-3. **Collect** (`02_`) — run LLMs, archive raw outputs and primary PDFs
-4. **Process** (`03_`) — summarize, extract atomic claims, build taxonomy
-5. **Analyze** (`04_`) — council/adversarial cross-examination; flag contradictions and gaps
-6. **Refine** (`05_`) — targeted research to close gaps
-7. **Simulate** (`10_`, `11_`) — build/modify URDF, run controllers, record experiments
-8. **Write** (`06_`) — outline then chapter drafts
-9. **Review** (`07_`) — adversarial self-review + supervisor loop
-10. **Finalize** (`08_`, `09_`) — consolidate references and appendices
+`simulation/pal_talos/videos/` holds one capture per scenario, mirrored at
+<https://youtube.com/playlist?list=PLGPFWyAgfJ08> for readers who prefer not to
+clone. They are illustrative: they show what a run looks like, not how often it
+succeeds, and no claim in the thesis rests on them.
 
----
+## Licence
 
-## Git Workflow
-
-### Branching strategy
-
-```
-main          ← stable, always reflects current thesis state
-  └── chapter/N-title     ← one branch per chapter draft
-  └── sim/feature-name    ← simulation development branches
-  └── fix/description     ← corrections and revisions
-```
-
-### Commit conventions
-
-```
-[chapter-N] Short description of change
-[sim] Short description of simulation update
-[lit] Literature / research update
-[mem] master_memory.md update
-[fix] Correction or revision
-```
-
-### Push to GitHub
-
-```powershell
-# Set token (never hardcode in files)
-$env:GITHUB_TOKEN = "your_token_here"
-
-# Stage, commit, push
-git add -A
-git commit -m "[mem] Update master memory — session YYYY-MM-DD"
-git push origin main
-```
-
----
-
-## Conventions
-
-- **Filenames** — `snake_case`, date-prefixed where chronological (`YYYY-MM-DD_topic.md`)
-- **Atomic claims** — each entry in `extracted_claims.json` must carry: `id`, `statement`, `sources[]`, `confidence`, `contested (bool)`
-- **Sources** — never cite a claim without a peer-reviewed or verifiable anchor; tag uncertain claims explicitly
-- **Versioning** — draft files use `_vN` suffix; never overwrite past versions during the writing phase
-- **Token security** — never hardcode credentials in versioned files; use `$env:GITHUB_TOKEN`
-
----
-
-## Key References
-
-- Sentis & Khatib (2005) — Synthesis of whole-body behaviors, *IJRR*
-- Wensing & Orin (2013) — Dynamic humanoid behaviors through task-space control, *ICRA*
-- Koolen et al. (2016) — Momentum-based control framework (Atlas), *IJHR*
-- Carpentier et al. (2019) — Pinocchio C++ library, *IROS*
-- Mastalli et al. (2020) — Crocoddyl: efficient framework for MPC, *ICRA*
-
----
-
-*Last updated: 2026-04-22 — [github.com/David543M/humanoid-wbc-thesis](https://github.com/David543M/humanoid-wbc-thesis)*
+See [`simulation/pal_talos/LICENSE`](simulation/pal_talos/LICENSE). The
+TALOS model is redistributed from `mujoco_menagerie` under its own terms.
