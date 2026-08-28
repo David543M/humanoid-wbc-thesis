@@ -1,39 +1,39 @@
 """
-S2 — Test de determinisme (P1d, caveat reproductibilite Ch5 §5.5 / Ch6).
+S2 — Determinism test (P1d, reproducibility caveat Ch5 §5.5 / Ch6).
 
-Question : le non-determinisme par seed observe entre les batchs N=20 et N=50
-(meme config gelee, meme seed -> issues differentes ; ex. seed 3 SUCCESS 3.59 m
-puis FELL 1.34 m) vient-il de la non-associativite flottante du BLAS multi-thread,
-ou est-il intrinseque (chaos de marge mince, autre source d'entropie) ?
+Question: does the per-seed non-determinism observed between the N=20 and N=50 batches
+(same frozen config, same seed -> different outcomes; e.g. seed 3 SUCCESS 3.59 m
+then FELL 1.34 m) come from the floating-point non-associativity of the multi-threaded BLAS,
+or is it intrinsic (thin-margin chaos, another entropy source)?
 
-Protocole : pour chaque seed, relancer la marche R fois (defaut 2) sous DEUX
-regimes de threading, en SOUS-PROCESSUS (l'env doit etre pose AVANT l'import
-numpy/mujoco de l'enfant) :
-  - MULTI  : threading par defaut (ce qu'utilisaient les batchs)
-  - SINGLE : BLAS mono-thread force (OMP/MKL/OPENBLAS/NUMEXPR/VECLIB = 1,
+Protocol: for each seed, re-run the walk R times (default 2) under TWO
+threading regimes, in SUBPROCESSES (the env must be set BEFORE the child's
+numpy/mujoco import):
+  - MULTI  : default threading (what the batches used)
+  - SINGLE : BLAS forced single-threaded (OMP/MKL/OPENBLAS/NUMEXPR/VECLIB = 1,
              PYTHONHASHSEED=0)
-Puis comparer les trajectoires com_err (et xi_err) tick-a-tick entre repetitions
-d'un meme (seed, regime).
+Then compare the com_err (and xi_err) trajectories tick by tick between repetitions
+of the same (seed, regime).
 
-Lecture des resultats :
-  - MULTI  identiques  ET SINGLE identiques -> deja deterministe (surprise ;
-                                               le non-det venait d'ailleurs)
-  - MULTI  divergent   ET SINGLE identiques -> HYPOTHESE CONFIRMEE : le BLAS
-                                               multi-thread est la cause ;
-                                               mono-thread restaure le determinisme
-  - MULTI  divergent   ET SINGLE divergent  -> non-determinisme INTRINSEQUE
-                                               (chaos marge mince / autre entropie)
-                                               -> argument Ch6 encore plus fort
+Reading the results:
+  - MULTI  identical   AND SINGLE identical  -> already deterministic (surprising;
+                                               the non-determinism came from elsewhere)
+  - MULTI  divergent   AND SINGLE identical  -> HYPOTHESIS CONFIRMED: the multi-threaded
+                                               BLAS is the cause;
+                                               single-thread restores determinism
+  - MULTI  divergent   AND SINGLE divergent  -> INTRINSIC non-determinism
+                                               (thin-margin chaos / other entropy)
+                                               -> Ch6 argument even stronger
 
-La divergence est caracterisee par : identiques bit-a-bit ? premier tick de
-divergence, ecart max, et issue macro (dist / fell_at / success). Un premier
-tick tres precoce ~ epsilon machine qui croit = amplification chaotique ; une
-divergence des le tick 0 = entropie d'initialisation.
+The divergence is characterised by: bit-for-bit identical? first divergence tick,
+max deviation, and macro outcome (dist / fell_at / success). A very early first
+tick ~ machine epsilon that grows = chaotic amplification; a
+divergence from tick 0 = initialisation entropy.
 
-Usage (terminal Anaconda, depuis pal_talos/) :
+Usage (Anaconda terminal, from pal_talos/):
     python s2_determinism.py                       # seeds 0 2 3, R=2, ~10 min
     python s2_determinism.py --seeds 0 1 2 3 --repeats 3
-Sorties : determinism_out/  (npz par run + determinism_report.md)
+Outputs: determinism_out/  (npz per run + determinism_report.md)
 """
 import argparse, os, subprocess, sys, time
 import numpy as np
@@ -42,8 +42,8 @@ FROZEN = ["--steps", "70", "--offlat", "0.08", "--dsovl", "0.12", "--tmin", "0.2
 SCRIPT = "talos_dcm_walk_timing.py"
 TIMEOUT = 900
 
-# Variables lues a l'import par numpy / MKL / OpenBLAS / OpenMP : posees dans
-# l'env de l'ENFANT (les poser dans ce process-ci serait trop tard).
+# Variables read at import time by numpy / MKL / OpenBLAS / OpenMP: set in
+# the CHILD's env (setting them in this process would be too late).
 SINGLE_ENV = {
     "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1", "VECLIB_MAXIMUM_THREADS": "1",
@@ -74,18 +74,18 @@ def outcome(npz):
 
 
 def compare(a, b):
-    """Compare deux trajectoires com_err : (identique?, 1er tick divergent, ecart max)."""
+    """Compare two com_err trajectories: (identical?, 1st divergent tick, max deviation)."""
     if a is None or b is None:
-        return dict(identical=False, first=-1, maxabs=float("nan"), note="run manquant")
+        return dict(identical=False, first=-1, maxabs=float("nan"), note="missing run")
     na, nb = len(a["com"]), len(b["com"])
     m = min(na, nb)
     ca, cb = a["com"][:m], b["com"][:m]
     if na == nb and np.array_equal(a["com"], b["com"]):
-        return dict(identical=True, first=-1, maxabs=0.0, note="bit-identique")
+        return dict(identical=True, first=-1, maxabs=0.0, note="bit-identical")
     diff = np.abs(ca - cb)
     nz = np.nonzero(diff > 0)[0]
     first = int(nz[0]) if nz.size else -1
-    note = "longueurs differentes (%d vs %d)" % (na, nb) if na != nb else "valeurs differentes"
+    note = "different lengths (%d vs %d)" % (na, nb) if na != nb else "different values"
     return dict(identical=False, first=first, maxabs=float(diff.max()), note=note)
 
 
@@ -97,7 +97,7 @@ def main():
     ap.add_argument("--regimes", type=str, nargs="+", default=["multi", "single"])
     a = ap.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
-    print("DETERMINISME  seeds=%s  repeats=%d  regimes=%s  config=%s"
+    print("DETERMINISM  seeds=%s  repeats=%d  regimes=%s  config=%s"
           % (a.seeds, a.repeats, a.regimes, " ".join(FROZEN)))
 
     data = {}       # (seed, regime, rep) -> outcome
@@ -108,14 +108,14 @@ def main():
                 o = outcome(npz)
                 data[(seed, regime, rep)] = o
                 tag = ("dist=%.3f fell=%.1f %s" % (o["dist"], o["fell"],
-                       "SUCCESS" if o["succ"] else "fail")) if o else "CRASH (pas de npz)"
+                       "SUCCESS" if o["succ"] else "fail")) if o else "CRASH (no npz)"
                 print("  seed %2d %-6s r%d : %-32s (%.0f s)" % (seed, regime, rep, tag, wall))
 
-    # ---------- comparaison rep0 vs rep1.. ----------
-    lines = ["# S2 — Test de determinisme", "",
-             "Config gelee : `%s`" % " ".join(FROZEN),
-             "Repetitions comparees a rep0. `identique` = com_err bit-a-bit egal.", ""]
-    lines += ["| seed | regime | rep | identique | 1er tick div. | ecart max (m) | issue | note |",
+    # ---------- comparison rep0 vs rep1.. ----------
+    lines = ["# S2 — Determinism test", "",
+             "Frozen config: `%s`" % " ".join(FROZEN),
+             "Repetitions compared against rep0. `identical` = com_err equal bit-for-bit.", ""]
+    lines += ["| seed | regime | rep | identical | 1st div. tick | max deviation (m) | outcome | note |",
               "|---|---|---|---|---|---|---|---|"]
     regime_identical = {r: True for r in a.regimes}
     for regime in a.regimes:
@@ -130,7 +130,7 @@ def main():
                     regime_identical[regime] = False
                 iss = ("%.3f/%s" % (cur["dist"], "S" if cur["succ"] else "F")) if cur else "—"
                 lines.append("| %d | %s | %d | %s | %s | %.2e | %s | %s |" % (
-                    seed, regime, rep, "OUI" if c["identical"] else "**NON**",
+                    seed, regime, rep, "YES" if c["identical"] else "**NO**",
                     c["first"] if c["first"] >= 0 else "—", c["maxabs"], iss, c["note"]))
 
     # ---------- verdict ----------
@@ -138,16 +138,16 @@ def main():
     multi_det = regime_identical.get("multi", None)
     single_det = regime_identical.get("single", None)
     if multi_det and single_det:
-        v = "Les deux regimes sont deterministes -> le non-determinisme observe entre batchs venait d'AILLEURS (config differente entre runs ? a investiguer)."
+        v = "Both regimes are deterministic -> the non-determinism observed between batches came from ELSEWHERE (different config between runs? to be investigated)."
     elif (multi_det is False) and single_det:
-        v = "**HYPOTHESE CONFIRMEE** : multi-thread divergent, mono-thread identique -> le BLAS multi-thread (non-associativite flottante) est la cause. Le determinisme par seed est recuperable en forcant OMP/MKL=1. -> Recommander l'execution mono-thread pour toute campagne reportee (Ch5) + documenter (Ch6)."
+        v = "**HYPOTHESIS CONFIRMED**: multi-thread divergent, single-thread identical -> the multi-threaded BLAS (floating-point non-associativity) is the cause. Per-seed determinism is recoverable by forcing OMP/MKL=1. -> Recommend single-threaded execution for any reported campaign (Ch5) + document it (Ch6)."
     elif (multi_det is False) and (single_det is False):
-        v = "**NON-DETERMINISME INTRINSEQUE** : divergence persistante meme en mono-thread -> l'entropie n'est pas (seulement) le BLAS. Cause probable : sensibilite chaotique du cycle limite a marge mince. -> La quantite reproductible reste le TAUX AGREGE ; argument Ch6 renforce (la config opere au bord de la stabilite)."
+        v = "**INTRINSIC NON-DETERMINISM**: divergence persists even single-threaded -> the entropy is not (only) the BLAS. Likely cause: chaotic sensitivity of the thin-margin limit cycle. -> The reproducible quantity remains the AGGREGATE RATE; Ch6 argument reinforced (the config operates at the edge of stability)."
     else:
-        v = "Resultat mixte / incomplet — voir le tableau."
+        v = "Mixed / incomplete result — see the table."
     lines += [v, "",
-              "Rappel : issue macro divergente deja observee entre N=20 et N=50 "
-              "(seed 3 SUCCESS 3.59 m -> FELL 1.34 m ; seed 2 3.72 -> 3.16 m ; seed 0 3.37 -> 3.42 m)."]
+              "Reminder: divergent macro outcome already observed between N=20 and N=50 "
+              "(seed 3 SUCCESS 3.59 m -> FELL 1.34 m; seed 2 3.72 -> 3.16 m; seed 0 3.37 -> 3.42 m)."]
 
     report = "\n".join(lines)
     print("\n" + report)

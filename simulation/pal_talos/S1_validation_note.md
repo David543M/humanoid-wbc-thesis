@@ -1,77 +1,77 @@
-# S1 — Static Balancing : note de validation
+# S1 — Static Balancing: validation note
 
-## 1. Définition (rappel thèse)
-**S1 = Static balancing** : « tenir debout sous poussées externes ». Métriques
-principales : erreur CoM, temps de récupération. Critères ancrés (Table 3.1) :
-taux de succès **> 90 % (IC Wilson 95 %, N ≥ 20)**, temps de calcul QP **< 1 ms moyen /
-< 5 ms p99**, conformité au cône de friction **100 %**, récupération de poussée
-(distribution *ouverte*, à calibrer conjointement avec S5).
+## 1. Definition (thesis recap)
+**S1 = Static balancing**: "stay standing under external pushes". Main
+metrics: CoM error, recovery time. Anchored criteria (Table 3.1):
+success rate **> 90% (Wilson 95% CI, N ≥ 20)**, QP computation time **< 1 ms mean /
+< 5 ms p99**, friction-cone compliance **100%**, push recovery
+(distribution *open*, to be calibrated jointly with S5).
 
-## 2. Contrôleur validé
-QP-WBC (`talos_wbc.py`) : variables `x = [q̈(50), τ(32), f(3·n_contacts)]` ;
-égalité = dynamique du corps flottant ; inégalités = pyramide de friction + limites de
-couple ; tâches molles = CoM, orientation base, posture, orientation pied. Deux
-améliorations apportées pendant la validation (voir §5) : contact en **égalité dure**
-(conditionnement) et solveur **ProxQP** (temps-réel).
+## 2. Validated controller
+QP-WBC (`talos_wbc.py`): variables `x = [q̈(50), τ(32), f(3·n_contacts)]`;
+equality = floating-base dynamics; inequalities = friction pyramid + torque
+limits; soft tasks = CoM, base orientation, posture, foot orientation. Two
+improvements were made during validation (see §5): contact as a **hard equality**
+(conditioning) and the **ProxQP** solver (real-time).
 
-## 3. Protocole statistique
-`validate_s1_batch.py` : N essais indépendants, chacun avec **randomisation de domaine**
-(masse ±10 %, friction ±20 %, bruit d'état initial 0.01) + **poussée aléatoire**
-(amplitude, direction horizontale, impulsion 0.1 s à t=2 s). Succès = reste debout
-(z > 0.8) **et** récupère (déviation CoM finale < 8 cm) **et** 0 repli QP. Taux de succès
-+ **intervalle de Wilson 95 %**. Batch résumable (CSV par essai).
+## 3. Statistical protocol
+`validate_s1_batch.py`: N independent trials, each with **domain randomisation**
+(mass ±10%, friction ±20%, initial-state noise 0.01) + a **random push**
+(magnitude, horizontal direction, 0.1 s impulse at t=2 s). Success = stays standing
+(z > 0.8) **and** recovers (final CoM deviation < 8 cm) **and** 0 QP fallbacks. Success rate
++ **95% Wilson interval**. Resumable batch (one CSV per trial).
 
-## 4. Résultats — deux batchs
+## 4. Results — two batches
 
-### 4.1 Batch non calibré — U(100, 300) N (découverte de la limite)
-| N | succès | taux | IC Wilson 95 % | verdict |
+### 4.1 Uncalibrated batch — U(100, 300) N (discovering the limit)
+| N | successes | rate | Wilson 95% CI | verdict |
 |---|---|---|---|---|
-| 25 | 23 | 92.0 % | **[75.0 %, 97.8 %]** | borne basse < 90 % → **non concluant** |
+| 25 | 23 | 92.0% | **[75.0%, 97.8%]** | lower bound < 90% → **inconclusive** |
 
-Diagnostic des 2 échecs : **tous deux des poussées sagittales (avant)** de 208 N et
-270 N. Mode identique : tangage croissant, dérive CoM vers l'avant, bascule ou divergence
-lente. Mesure de l'enveloppe de récupération **sans pas** : **avant ≈ 200 N** vs
-**latéral ≈ 400 N** — asymétrie intrinsèque, bornée par le polygone de support
-(orteil +0.11 m). Sous randomisation défavorable, les poussées avant de 200–270 N
-dépassent l'enveloppe.
+Diagnosis of the 2 failures: **both were sagittal (forward) pushes**, of 208 N and
+270 N. Identical mode: growing pitch, forward CoM drift, tipping or slow
+divergence. Measuring the **stepless** recovery envelope: **forward ≈ 200 N** vs
+**lateral ≈ 400 N** — an intrinsic asymmetry, bounded by the support polygon
+(toe at +0.11 m). Under adverse randomisation, forward pushes of 200–270 N
+exceed the envelope.
 
-**Conclusion clé :** ces poussées exigent un **pas** pour être récupérées → elles
-relèvent de **S2 / capture-point**, pas de S1. La distribution U(100, 300) N était donc
-**hors périmètre statique**.
+**Key conclusion:** these pushes require a **step** in order to be recovered → they
+belong to **S2 / capture-point**, not to S1. The U(100, 300) N distribution was therefore
+**outside the static scope**.
 
-### 4.2 Batch calibré — U(80, 150) N (validation dans le périmètre S1)
-Distribution recalibrée à l'**enveloppe récupérable sans pas** (plafond ~150 N, marge DR
-incluse). Résout le flag ouvert « perturbation recovery — à calibrer » de la thèse.
+### 4.2 Calibrated batch — U(80, 150) N (validation within the S1 scope)
+Distribution recalibrated to the **stepless recoverable envelope** (ceiling ~150 N, DR margin
+included). This settles the thesis's open flag "perturbation recovery — to be calibrated".
 
-| N | succès | taux | IC Wilson 95 % | verdict |
+| N | successes | rate | Wilson 95% CI | verdict |
 |---|---|---|---|---|
-| 25 | 25 | 100 % | [86.7 %, 100 %] | borne basse < 90 % (N insuffisant) |
-| **50** | **50** | **100 %** | **[92.9 %, 100 %]** | **borne basse > 90 % → PASS** |
+| 25 | 25 | 100% | [86.7%, 100%] | lower bound < 90% (N too small) |
+| **50** | **50** | **100%** | **[92.9%, 100%]** | **lower bound > 90% → PASS** |
 
-## 5. Décisions techniques prises pendant la validation
-- **Contact dur vs mou** : la tâche de non-glissement en coût mou (w=1e4) donnait
-  κ(G) ≈ 2.1×10¹⁰ (QP mal conditionné). Passage en **égalité dure 6D/pied** (plein rang) →
-  κ(G) ≈ 1.0×10⁷ (**×2000**), sans perte de performance.
-- **Solveur QP** : quadprog = 2.35 ms/solve (**échec** du seuil < 1 ms). Passage à
-  **ProxQP** (workspace persistant + inégalités pré-calculées) → cycle WBC complet
-  **0.975 ms moyen**, p99 1.7 ms (**PASS**).
-- **Métrique de succès honnête** : critère strict (debout + récupération CoM + 0 repli),
-  et IC Wilson (pas seulement le point estimé) — c'est l'IC qui a révélé que N=25 était
-  insuffisant.
+## 5. Technical decisions taken during validation
+- **Hard vs soft contact**: the no-slip task as a soft cost (w=1e4) gave
+  κ(G) ≈ 2.1×10¹⁰ (badly conditioned QP). Moving to a **hard 6D equality per foot** (full rank) →
+  κ(G) ≈ 1.0×10⁷ (**×2000**), with no loss of performance.
+- **QP solver**: quadprog = 2.35 ms/solve (**fails** the < 1 ms threshold). Moving to
+  **ProxQP** (persistent workspace + precomputed inequalities) → full WBC cycle
+  **0.975 ms mean**, p99 1.7 ms (**PASS**).
+- **An honest success metric**: a strict criterion (standing + CoM recovery + 0 fallbacks),
+  and the Wilson CI (not just the point estimate) — it was the CI that revealed N=25 was
+  insufficient.
 
-## 6. Verdict S1
-| Critère | Exigence | Résultat | Statut |
+## 6. S1 verdict
+| Criterion | Requirement | Result | Status |
 |---|---|---|---|
-| Cône de friction | 100 % | 100 % par construction | ✅ |
-| Temps de calcul QP | < 1 ms moyen ; < 5 ms p99 | 0.975 ms ; 1.7 ms | ✅ |
-| Erreur CoM | faible | ~0 (récupération complète) | ✅ |
-| Taux de succès | > 90 %, Wilson 95 %, N ≥ 20 | 50/50 = 100 %, IC [92.9, 100], N=50 | ✅ |
+| Friction cone | 100% | 100% by construction | ✅ |
+| QP computation time | < 1 ms mean; < 5 ms p99 | 0.975 ms; 1.7 ms | ✅ |
+| CoM error | low | ~0 (full recovery) | ✅ |
+| Success rate | > 90%, Wilson 95%, N ≥ 20 | 50/50 = 100%, CI [92.9, 100], N=50 | ✅ |
 
-**S1 est formellement validé**, dans un périmètre statique correctement défini.
+**S1 is formally validated**, within a properly defined static scope.
 
-## 7. Limites & suite
-- Asymétrie sagittal/latéral (~200 vs ~400 N) : propriété physique du support ; motive
-  directement S2 (placement de pas / capture-point) pour les poussées hors-enveloppe.
-- Résultat de solveur (ProxQP) : le walker (S2) est passé de 4 à 3 « pas propres »
-  (optimum valide légèrement différent) — dans le bruit de la fragilité de S2, à re-régler.
-- Prochaine étape : S2 (marche 3 m), où le verrou sagittal identifié devient central.
+## 7. Limitations & next steps
+- Sagittal/lateral asymmetry (~200 vs ~400 N): a physical property of the support; it directly
+  motivates S2 (step placement / capture-point) for out-of-envelope pushes.
+- Solver side effect (ProxQP): the walker (S2) went from 4 to 3 "clean steps"
+  (a slightly different valid optimum) — within the noise of S2's fragility, to be retuned.
+- Next step: S2 (3 m walk), where the identified sagittal bottleneck becomes central.

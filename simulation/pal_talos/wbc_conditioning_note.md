@@ -1,64 +1,64 @@
-# Conditionnement du QP du WBC — contact mou vs égalité dure
+# Conditioning of the WBC QP — soft contact vs hard equality
 
-## Problème
-La tâche de non-glissement des contacts était un **coût mou** à très fort poids
-(`W_CONTACT = 1e4`). Ajoutée au Hessien comme `1e4·Jcᵀ Jc`, à côté des autres tâches
-(poids 1–100), elle étale énormément le spectre de `G` → **mauvais conditionnement**
-mesuré : `κ(G) ≈ 2.1×10¹⁰`. Le solveur (quadprog) s'en sortait (0 repli) mais le QP
-était numériquement fragile.
+## Problem
+The contact no-slip task was a **soft cost** with a very large weight
+(`W_CONTACT = 1e4`). Added to the Hessian as `1e4·Jcᵀ Jc`, alongside the other tasks
+(weights 1–100), it spreads the spectrum of `G` enormously → **poor conditioning**,
+measured at `κ(G) ≈ 2.1×10¹⁰`. The solver (quadprog) coped (0 fallbacks) but the QP
+was numerically fragile.
 
-Le choix initial du coût mou était motivé par le **rang déficient** : imposer en dur les
-24 contraintes des coins de contact (4 coins × 3 ddl × 2 pieds) est redondant — un pied
-plat rigide n'a que 6 ddl, donc 12 des 24 lignes sont dépendantes, et quadprog rejette
-une égalité non de plein rang.
+The soft cost was originally chosen because of **rank deficiency**: imposing the
+24 contact-corner constraints as hard equalities (4 corners × 3 DoF × 2 feet) is
+redundant — a rigid flat foot has only 6 DoF, so 12 of the 24 rows are dependent, and
+quadprog rejects an equality that is not full rank.
 
-## Correction testée (opt-in : `wbc.hard_contact = True`)
-On exprime le no-slip en **égalité dure sur la pose 6D du corps-pied** (3 translation +
-3 rotation par pied via `mj_jac`), soit **12 lignes indépendantes** en double appui —
-plein rang, pas de redondance. La tâche molle `1e4·Jcᵀ Jc` est retirée du coût ; les
-forces de contact `f` restent (pyramide de friction inchangée).
+## Correction tested (opt-in: `wbc.hard_contact = True`)
+No-slip is expressed as a **hard equality on the 6D foot-body pose** (3 translation +
+3 rotation per foot via `mj_jac`), giving **12 independent rows** in double support —
+full rank, no redundancy. The soft task `1e4·Jcᵀ Jc` is removed from the cost; the
+contact forces `f` remain (friction pyramid unchanged).
 
-## Résultat (debout, identique par ailleurs)
+## Result (standing, otherwise identical)
 
-| Formulation | κ(G) médian | replis QP | debout | err CoM | push 150/400 N |
+| Formulation | median κ(G) | QP fallbacks | upright | CoM err | push 150/400 N |
 |---|---:|---:|---|---:|---|
-| coût mou (défaut) | **2.1×10¹⁰** | 0 | UPRIGHT | 0.01 mm | OK / OK |
-| **égalité dure** (`hard_contact`) | **1.0×10⁷** | 0 | UPRIGHT | 0.01 mm | OK / OK |
+| soft cost (default) | **2.1×10¹⁰** | 0 | UPRIGHT | 0.01 mm | OK / OK |
+| **hard equality** (`hard_contact`) | **1.0×10⁷** | 0 | UPRIGHT | 0.01 mm | OK / OK |
 
-**Conditionnement amélioré ×2000** (2.1e10 → 1.0e7), sans aucune perte de performance ni
-de robustesse, et toujours 0 repli (le rang déficient est évité par la formulation 6D).
+**Conditioning improved ×2000** (2.1e10 → 1.0e7), with no loss of performance or
+robustness, and still 0 fallbacks (the 6D formulation avoids the rank deficiency).
 
-## Limite / extension
-`hard_contact` fige **tous** les pieds de `self.feet` : valable en **double appui**
-(debout). Pour la **marche** en simple appui, il faudrait n'imposer la contrainte que sur
-le(s) pied(s) réellement en contact (pied d'appui), pas le pied de balancement — le walker
-`DCMWalk` ayant son propre `control()`, l'extension y est à faire séparément.
+## Limitation / extension
+`hard_contact` freezes **every** foot in `self.feet`: valid in **double support**
+(standing). For **walking** in single support, the constraint should be imposed only on
+the foot or feet actually in contact (the stance foot), not the swing foot — since the
+`DCMWalk` walker has its own `control()`, that extension has to be made there separately.
 
-## Recommandation
-Garder `hard_contact` comme l'option recommandée pour l'équilibre/poussée (meilleur
-conditionnement, formulation plus propre). À documenter en Méthodologie comme la
-formulation de référence, le coût mou étant l'historique. Activation :
+## Recommendation
+Keep `hard_contact` as the recommended option for balancing and push recovery (better
+conditioning, cleaner formulation). To be documented in the Methodology as the reference
+formulation, the soft cost being the historical one. Enable with:
 `wbc = WBC(m, d); wbc.hard_contact = True`.
 
 ---
 
-## Mise à jour — formulation dure adoptée par défaut (équilibre + marche)
+## Update — hard formulation adopted as the default (balancing and walking)
 
-`hard_contact` (équilibre) et `use_hard_contact` (walker, sur le pied d'appui seul) sont
-désormais les **valeurs par défaut**. Résultats mesurés :
+`hard_contact` (balancing) and `use_hard_contact` (walker, on the stance foot alone) are
+now the **defaults**. Measured results:
 
-| Scénario | κ(G) avant (mou) | κ(G) après (dur) | performance |
+| Scenario | κ(G) before (soft) | κ(G) after (hard) | performance |
 |---|---:|---:|---|
-| Équilibre debout | 2.1×10¹⁰ | **1.0×10⁷** | UPRIGHT, push 150/400 N OK, CoM 0.01 mm |
-| Marche (`--walk-cl`) | 2.08×10¹⁰ | **2.07×10⁷** | **4 pas propres** (identique), 0 repli |
+| Standing balance | 2.1×10¹⁰ | **1.0×10⁷** | UPRIGHT, push 150/400 N OK, CoM 0.01 mm |
+| Walking (`--walk-cl`) | 2.08×10¹⁰ | **2.07×10⁷** | **4 clean steps** (identical), 0 fallbacks |
 
-Gain de conditionnement ~×1000–2000 sans changement de performance. En simple appui,
-seule la contrainte du **pied d'appui** est imposée (le pied de balancement reste libre),
-via la liste `active` du walker.
+A conditioning gain of roughly ×1000–2000 with no change in performance. In single
+support, only the **stance foot** constraint is imposed (the swing foot stays free),
+through the walker's `active` list.
 
-**Note de reproductibilité** : changer la formulation de contact par défaut décale
-légèrement la *trajectoire* du baseline open-loop *après la chute* (le robot tombé glisse
-différemment ; ex. x≈1.5 m au lieu de 0.82 m à 8 s). Les métriques **significatives** sont
-préservées : il tombe toujours (open-loop), 0 repli QP, équilibre/poussée inchangés, et
-4 pas propres en walk-cl. Pour revenir à l'historique : `wbc.hard_contact=False` /
-`c.use_hard_contact=False`.
+**Reproducibility note**: changing the default contact formulation shifts the open-loop
+baseline *trajectory* slightly *after the fall* (the fallen robot slides differently;
+for example x≈1.5 m instead of 0.82 m at 8 s). The **meaningful** metrics are preserved:
+it still falls (open-loop), 0 QP fallbacks, balance and push recovery unchanged, and
+4 clean steps in walk-cl. To return to the historical behaviour:
+`wbc.hard_contact=False` / `c.use_hard_contact=False`.

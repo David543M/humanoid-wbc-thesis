@@ -1,78 +1,78 @@
-# Audit — Loi de timing S2 vs implémentation officielle Khadiv2020
-*2026-07-15 | Référence : machines-in-motion/reactive_planners (`src/dcm_vrp_planner.cpp`, BSD-3, NYU/MPI — groupe Righetti/Khadiv) vs `talos_dcm_walk_timing.py` (DCMWalkT)*
+# Audit — S2 timing law vs the official Khadiv2020 implementation
+*2026-07-15 | Reference: machines-in-motion/reactive_planners (`src/dcm_vrp_planner.cpp`, BSD-3, NYU/MPI — Righetti/Khadiv group) vs `talos_dcm_walk_timing.py` (DCMWalkT)*
 
-## 1. Formulation de référence (DcmVrpPlanner)
+## 1. Reference formulation (DcmVrpPlanner)
 
-QP résolu à **chaque cycle de contrôle**, 9 variables : `u_x, u_y` (lieu du pas
-suivant, relatif à l'appui), `τ = e^{ωT}` (durée exponentiée → contraintes
-linéaires), `b_x, b_y` (offset DCM au prochain touchdown), 4 slacks.
+QP solved at **every control cycle**, 9 variables: `u_x, u_y` (location of the next
+step, relative to the stance foot), `τ = e^{ωT}` (exponentiated duration → linear
+constraints), `b_x, b_y` (DCM offset at the next touchdown), 4 slacks.
 
-- **Coût** : tracking quadratique de valeurs nominales (`l_nom, w_nom, τ_nom,
-  bx_nom, by_nom`) dérivées de la vitesse désirée `v_des`.
-- **Égalités (2)** : récursion DCM — `u + b = (ξ_mes − p_appui)·e^{−ωt}·τ`
-  (cohérence lieu/durée/offset, canaux x et y **couplés par τ**).
-- **Inégalités (10)** : boîtes sur longueur/largeur de pas (asymétriques selon
-  le côté d'appui), `τ ∈ [τ_min, τ_max]` avec `τ_min` relevé dynamiquement à
-  `e^{ω·max(t_min, t_écoulé + t_min_restant)}`, bornes de **viabilité** sur
-  `b` (`bx = l/(τ−1)`, `by_in/by_out` asymétriques — l'asymétrie côté
-  appui/swing est structurelle).
-- **Fallback** : QP infaisable → valeurs nominales.
+- **Cost**: quadratic tracking of nominal values (`l_nom, w_nom, τ_nom,
+  bx_nom, by_nom`) derived from the desired velocity `v_des`.
+- **Equalities (2)**: DCM recursion — `u + b = (ξ_mes − p_appui)·e^{−ωt}·τ`
+  (consistency of location/duration/offset, x and y channels **coupled through τ**).
+- **Inequalities (10)**: box bounds on step length/width (asymmetric according to
+  the stance side), `τ ∈ [τ_min, τ_max]` with `τ_min` raised dynamically to
+  `e^{ω·max(t_min, t_écoulé + t_min_restant)}`, **viability** bounds on
+  `b` (`bx = l/(τ−1)`, asymmetric `by_in/by_out` — the stance/swing side
+  asymmetry is structural).
+- **Fallback**: infeasible QP → nominal values.
 
-## 2. Notre implémentation (DCMWalkT, lignes 296–317 + 356–380)
+## 2. Our implementation (DCMWalkT, lines 296–317 + 356–380)
 
-**Analytique, pas de QP.** Découplage timing/placement :
+**Analytic, no QP.** Timing and placement are decoupled:
 
-- **Timing** : loi de divergence fermée `d(τ) = d0·e^{ωτ}` →
-  `t_rem = ln(d*/d)/ω` par canal ; latéral : `d* = ly + ξ_s` ; sagittal :
-  plafond `SAG_MAX` ; `T_k = clip(τ + min(t_lat_rem, t_sag_rem), T_MIN, T_MAX)`.
-  `d ≤ 0` (DCM du mauvais côté) → poser immédiat (`_force_land`).
-- **Placement** : capture point analytique `g_y = ξ_prédit(t_go) + sgn·off_lat`
-  avec bornes géométriques `[min_sep, MAX_SEP]` relatives au pied d'appui réel ;
-  **sagittal : foothold du plan figé** (pas d'ajustement `u_x`), mode
-  récupération = pas latéral pur, progression sagittale gelée.
-- **Re-planification par pas** : `d0` mesuré à chaque entrée de pas.
+- **Timing**: closed-form divergence law `d(τ) = d0·e^{ωτ}` →
+  `t_rem = ln(d*/d)/ω` per channel; lateral: `d* = ly + ξ_s`; sagittal:
+  ceiling `SAG_MAX`; `T_k = clip(τ + min(t_lat_rem, t_sag_rem), T_MIN, T_MAX)`.
+  `d ≤ 0` (DCM on the wrong side) → immediate touchdown (`_force_land`).
+- **Placement**: analytic capture point `g_y = ξ_prédit(t_go) + sgn·off_lat`
+  with geometric bounds `[min_sep, MAX_SEP]` relative to the actual stance foot;
+  **sagittal: foothold frozen from the plan** (no `u_x` adjustment), recovery
+  mode = pure lateral step, sagittal progression frozen.
+- **Per-step replanning**: `d0` measured at every step entry.
 
-## 3. Correspondance
+## 3. Correspondence
 
-| Élément | Référence | Nôtre | Verdict |
+| Element | Reference | Ours | Verdict |
 |---|---|---|---|
-| Loi de divergence DCM (LIP, e^{ωt}) | oui (via τ) | oui (fermée) | ✅ identique |
-| Timing raccourci si DCM fuit | τ_min dynamique | T_k = τ + t_rem, plancher T_MIN | ✅ équivalent |
-| Timing allongé si DCM sage | jusqu'à τ_max | jusqu'à T_MAX | ✅ équivalent |
-| Valeur de commutation latérale | by_nom (l_p, v_des) | d* = ly + ξ_s | ✅ même rôle, paramétrisation simplifiée |
-| Asymétrie côté appui | bornes by_in/by_out | min_sep anti-croisement (géométrique) | ⚠️ partielle |
-| Ajustement lieu sagittal u_x | oui (QP joint) | **non** (plan figé + recovery latéral pur) | ❌ absent |
-| Couplage lieu↔durée (τ dans l'égalité) | oui | non (découplé) | ❌ absent |
-| Bornes de viabilité sur b | oui | non (bornes géométriques) | ❌ absent |
-| Optimisation jointe multi-objectifs | QP 9 var + slacks | greedy min(2 canaux) | ❌ simplification |
-| Recovery explicite entrée dégénérée | non (fallback nominal) | oui ([recov] latéral pur) | ➕ ajout de notre cru |
+| DCM divergence law (LIP, e^{ωt}) | yes (via τ) | yes (closed form) | ✅ identical |
+| Timing shortened when the DCM escapes | dynamic τ_min | T_k = τ + t_rem, floor T_MIN | ✅ equivalent |
+| Timing lengthened when the DCM is well behaved | up to τ_max | up to T_MAX | ✅ equivalent |
+| Lateral switching value | by_nom (l_p, v_des) | d* = ly + ξ_s | ✅ same role, simplified parametrisation |
+| Stance-side asymmetry | by_in/by_out bounds | anti-crossing min_sep (geometric) | ⚠️ partial |
+| Sagittal step-location adjustment u_x | yes (joint QP) | **no** (frozen plan + pure lateral recovery) | ❌ absent |
+| Location↔duration coupling (τ in the equality) | yes | no (decoupled) | ❌ absent |
+| Viability bounds on b | yes | no (geometric bounds) | ❌ absent |
+| Joint multi-objective optimisation | 9-var QP + slacks | greedy min(2 channels) | ❌ simplification |
+| Explicit recovery on degenerate entry | no (nominal fallback) | yes (pure lateral [recov]) | ➕ our own addition |
 
-## 4. Conséquences pour la thèse
+## 4. Consequences for the thesis
 
-1. **La formulation « in the lineage of Khadiv et al. » (Ch5 §5.5) est
-   correcte et doit rester** — ne jamais écrire « implémente Khadiv2020 » :
-   nous implémentons la *loi de divergence temporelle* de cette lignée, pas le
-   QP joint lieu+durée.
-2. **L'audit CONFIRME la lecture architecturale de §5.8** : l'absence
-   d'ajustement sagittal (`u_x` figé, recovery latéral pur) chez nous — alors
-   que la référence l'optimise — est exactement le mécanisme manquant que la
-   campagne S5 mesure (I₅₀ sagittal 20–30 N·s vs latéral 45–50+). La
-   prescription « sagittal analogue of the lateral timing law » de la
-   criticalinsight §5.8 correspond, en termes de la référence, à réintroduire
-   `u_x` et le couplage par τ.
-3. **Validité de l'ablation `--no-timing`** : `use_timing=False` gèle
-   uniquement la mise à jour de T_k (T_k = T_nom) ; `use_cp_swing` (placement
-   capture point) reste actif → l'ablation isole proprement la contribution
-   du *timing* seul, séparée du *placement* — plus propre que dans la
-   référence où les deux sont dans le même QP et non séparables.
-4. **Candidat future work chiffrable** : remplacer le greedy 2-canaux par le
-   QP 9-variables de la référence (quadprog déjà dans le pipeline) = extension
-   à effort borné, directement comparable.
+1. **The wording "in the lineage of Khadiv et al." (Ch5 §5.5) is
+   correct and must stay** — never write "implements Khadiv2020": we
+   implement the *temporal divergence law* of that lineage, not the
+   joint location+duration QP.
+2. **The audit CONFIRMS the architectural reading of §5.8**: the absence of
+   sagittal adjustment on our side (`u_x` frozen, pure lateral recovery) — where
+   the reference optimises it — is exactly the missing mechanism that the
+   S5 campaign measures (sagittal I₅₀ 20–30 N·s vs lateral 45–50+). The
+   "sagittal analogue of the lateral timing law" prescription of the
+   criticalinsight §5.8 amounts, in the reference's terms, to reintroducing
+   `u_x` and the coupling through τ.
+3. **Validity of the `--no-timing` ablation**: `use_timing=False` freezes
+   only the T_k update (T_k = T_nom); `use_cp_swing` (capture-point
+   placement) stays active → the ablation cleanly isolates the contribution
+   of *timing* alone, separated from *placement* — cleaner than in the
+   reference, where the two sit in the same QP and are not separable.
+4. **Quantifiable future-work candidate**: replace the 2-channel greedy rule with
+   the reference's 9-variable QP (quadprog is already in the pipeline) = a
+   bounded-effort extension, directly comparable.
 
-## 5. Limites de l'audit
+## 5. Limitations of the audit
 
-Comparaison sur `dcm_vrp_planner.cpp` (master, consulté 2026-07-15) ;
-le wrapper `DcmReactiveStepper` (gestion phases/end-effectors) n'a pas été
-audité — hors périmètre : notre machine à pas est différente par conception.
-La référence tourne sur Bolt/Solo (pas TALOS) ; aucune comparaison numérique
-directe n'est donc possible, seulement structurelle.
+Comparison made against `dcm_vrp_planner.cpp` (master, accessed 2026-07-15);
+the `DcmReactiveStepper` wrapper (phase / end-effector management) was not
+audited — out of scope: our stepping machine differs by design.
+The reference runs on Bolt/Solo (not TALOS); no direct numerical
+comparison is therefore possible, only a structural one.

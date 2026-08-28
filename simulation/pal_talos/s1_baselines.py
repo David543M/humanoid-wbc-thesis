@@ -1,40 +1,40 @@
 """
-s1_baselines.py — executeurs ALTERNATIFS pour le protocole S1 (test de H3).
+s1_baselines.py — ALTERNATIVE executors for the S1 protocol (test of H3).
 
-H3 : contact modeling + task-priority > torque control naif
-(CoM deviation et contact force variance plus faibles ; falsifie si metriques
-equivalentes ou pires vs baseline).
+H3: contact modeling + task-priority > naive torque control
+(lower CoM deviation and contact force variance; falsified if the metrics are
+equivalent to or worse than the baseline).
 
-Deux baselines, MEME interface que talos_wbc.WBC (.control(), .base, .com_ref,
-._qp_fail) pour brancher dans validate_s1_batch.py sans toucher au protocole :
+Two baselines, SAME interface as talos_wbc.WBC (.control(), .base, .com_ref,
+._qp_fail) so they plug into validate_s1_batch.py without touching the protocol:
 
-  1) PDGrav — PD articulaire gravite-compense ("torque control naif") :
+  1) PDGrav — gravity-compensated joint PD ("naive torque control"):
          tau = h_act + KP*(q_home - q) - KD*qdot
-     C'est EXACTEMENT le repli du QP-WBC (talos_wbc.control, branche except)
-     promu en controleur principal. Aucune notion de contact, de CoM ni de cone.
+     This is EXACTLY the QP-WBC fallback (talos_wbc.control, except branch)
+     promoted to primary controller. No notion of contact, CoM or cone.
 
-  2) NullSpaceTP — task-priority par projections d'espace nul strictes
-     (Sentis & Khatib 2005 ; recursion de Siciliano & Slotine 1991), avec
-     inverses dynamiquement consistantes J# = M^-1 J^T (J M^-1 J^T)^+ :
-         priorites : contact (pieds figes) > CoM > orientation base > posture
-         qdd = somme des contributions projetees ; puis couples par moindres
-         carres sur  S^T tau + Jc^T f = M qdd + h  (dynamique corps flottant).
-     MEMES gains de tache que le QP (importes de talos_wbc) — la SEULE
-     difference est la mecanique de resolution : PAS de cone de friction,
-     PAS d'unilateralite fz>=0, PAS de limites de couple dans la resolution
-     (clip a posteriori seulement). C'est precisement le contraste teste par H3.
+  2) NullSpaceTP — task-priority with strict null-space projections
+     (Sentis & Khatib 2005; recursion of Siciliano & Slotine 1991), with
+     dynamically consistent inverses J# = M^-1 J^T (J M^-1 J^T)^+:
+         priorities: contact (feet locked) > CoM > base orientation > posture
+         qdd = sum of the projected contributions; then torques by least
+         squares on  S^T tau + Jc^T f = M qdd + h  (floating-base dynamics).
+     SAME task gains as the QP (imported from talos_wbc) — the ONLY
+     difference is the solution mechanics: NO friction cone,
+     NO unilaterality fz>=0, NO torque limits in the solve
+     (a posteriori clip only). This is precisely the contrast tested by H3.
 
-Aucune modification de talos_wbc.py. Les coins de contact (LEGACY/MEASURED) ne
-concernent que le QP ; les baselines n'en consomment pas.
+No modification to talos_wbc.py. The contact corners (LEGACY/MEASURED) concern
+only the QP; the baselines do not consume them.
 """
 import numpy as np, mujoco
 import talos_wbc as W
 
 
 class _S1Executor:
-    """Base commune : selection actionneurs, references home/CoM, interface batch."""
+    """Common base: actuator selection, home/CoM references, batch interface."""
 
-    def __init__(self, m, d, corners=None):        # corners accepte et ignore (uniformite harnais)
+    def __init__(self, m, d, corners=None):        # corners accepted and ignored (harness uniformity)
         self.m, self.d = m, d
         self.nv, self.nu = m.nv, m.nu
         self.base = m.body("base_link").id
@@ -55,9 +55,9 @@ class _S1Executor:
         mujoco.mj_forward(m, d)
         self.home = np.array([d.qpos[a] for a in self.act_qadr])
         self.com_ref = d.subtree_com[self.base].copy()
-        self._qp_fail = 0                       # pas de QP -> jamais de repli
+        self._qp_fail = 0                       # no QP -> never a fallback
 
-    # -- taches identiques au QP (memes gains, memes erreurs) --
+    # -- tasks identical to the QP (same gains, same errors) --
     def _posture(self):
         d = self.d
         q = np.array([d.qpos[a] for a in self.act_qadr])
@@ -75,13 +75,13 @@ class _S1Executor:
 
 
 class PDGrav(_S1Executor):
-    """Baseline 1 — PD articulaire gravite-compense (= repli QP promu controleur).
+    """Baseline 1 — gravity-compensated joint PD (= QP fallback promoted to controller).
 
-    scale : raidissement des gains (KP*scale, KD*sqrt(scale)). scale=1 = gains
-    apparies a la tache posture du QP (60/12) — SOUS-REGLE : tombe seul en ~2.4 s
-    (pendule non stabilise). scale=10 (KP=600) = baseline DEFENDABLE : tient debout
-    et survit a 300 N nominal (verifie sandbox 2026-07-16) car S1 est statiquement
-    stable — le PD raide n'a toujours AUCUNE notion de CoM ni de contact."""
+    scale: gain stiffening (KP*scale, KD*sqrt(scale)). scale=1 = gains
+    matched to the QP posture task (60/12) — UNDER-TUNED: falls on its own in ~2.4 s
+    (unstabilised pendulum). scale=10 (KP=600) = DEFENSIBLE baseline: stays standing
+    and survives 300 N nominal (sandbox check 2026-07-16) because S1 is statically
+    stable — the stiff PD still has NO notion of CoM or contact."""
 
     def __init__(self, m, d, corners=None, scale=1.0):
         super().__init__(m, d, corners)
@@ -100,12 +100,12 @@ class PDGrav(_S1Executor):
 
 
 class NullSpaceTP(_S1Executor):
-    """Baseline 2 — task-priority null-space (Sentis & Khatib), sans QP ni cone."""
+    """Baseline 2 — null-space task-priority (Sentis & Khatib), without QP or cone."""
 
-    RCOND = 1e-8    # pinv (rang deficient aux singularites)
+    RCOND = 1e-8    # pinv (rank deficient at singularities)
 
     def _dyn_pinv(self, J, Minv):
-        """Inverse dynamiquement consistante J# = M^-1 J^T (J M^-1 J^T)^+."""
+        """Dynamically consistent inverse J# = M^-1 J^T (J M^-1 J^T)^+."""
         Lam_inv = J @ Minv @ J.T
         return Minv @ J.T @ np.linalg.pinv(Lam_inv, rcond=self.RCOND)
 
@@ -115,7 +115,7 @@ class NullSpaceTP(_S1Executor):
         M = np.zeros((nv, nv)); W.fill_fullM(m, d, M)
         Minv = np.linalg.inv(M + 1e-9 * np.eye(nv))
         h = d.qfrc_bias.copy()
-        # -- priorite 1 : contact (pieds figes 6D, Baumgarte identique au QP) --
+        # -- priority 1: contact (feet locked 6D, Baumgarte identical to the QP) --
         cr = []
         for fb in self.feet:
             Jp = np.zeros((3, nv)); Jr = np.zeros((3, nv))
@@ -123,29 +123,29 @@ class NullSpaceTP(_S1Executor):
             cr += [Jp, Jr]
         Jc = np.vstack(cr)                                   # 12 x nv
         a_c = -W.BAUMGARTE * (Jc @ d.qvel)
-        # -- priorite 2 : CoM --
+        # -- priority 2: CoM --
         Jcom = np.zeros((3, nv)); mujoco.mj_jacSubtreeCom(m, d, Jcom, self.base)
         com = d.subtree_com[self.base]
         a_com = W.KP_COM * (self.com_ref - com) - W.KD_COM * (Jcom @ d.qvel)
-        # -- priorite 3 : orientation base --
+        # -- priority 3: base orientation --
         tmp = np.zeros((3, nv)); Jori = np.zeros((3, nv))
         mujoco.mj_jacBody(m, d, tmp, Jori, self.base)
         a_ori = W.KP_ORI * self._ori_err() - W.KD_ORI * (Jori @ d.qvel)
-        # -- priorite 4 : posture --
+        # -- priority 4: posture --
         Jpos = np.zeros((nu, nv))
         for k, dof in enumerate(self.act_dofs):
             Jpos[k, dof] = 1.0
         _, _, a_pos = self._posture()
-        # -- recursion stricte d'espace nul (acceleration) --
+        # -- strict null-space recursion (acceleration) --
         qdd = np.zeros(nv); N = np.eye(nv)
         for J, a in ((Jc, a_c), (Jcom, a_com), (Jori, a_ori), (Jpos, a_pos)):
             Jr_ = J @ N
-            Jh = self._dyn_pinv(Jr_, Minv)               # inverse dyn. consistante
+            Jh = self._dyn_pinv(Jr_, Minv)               # dyn. consistent inverse
             qdd = qdd + Jh @ (a - J @ qdd)
-            N = N @ (np.eye(nv) - Jh @ Jr_)              # projecteur dyn. consistant
-        # -- couples : moindres carres sur la dynamique corps flottant --
-        #    S^T tau + Jc^T f = M qdd + h   (AUCUNE contrainte sur f : pas de cone,
-        #    pas de fz>=0 — le contraste H3)
+            N = N @ (np.eye(nv) - Jh @ Jr_)              # dyn. consistent projector
+        # -- torques: least squares on the floating-base dynamics --
+        #    S^T tau + Jc^T f = M qdd + h   (NO constraint on f: no cone,
+        #    no fz>=0 — the H3 contrast)
         A = np.hstack([self.S, Jc.T])                        # nv x (nu+12)
         b = M @ qdd + h
         z, *_ = np.linalg.lstsq(A, b, rcond=None)

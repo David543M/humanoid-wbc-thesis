@@ -1,40 +1,40 @@
 r"""
-TALOS — S4 : LOCO-MANIPULATION quasi-statique (marche plane + port d'une VRAIE boite).
+TALOS — S4: quasi-static LOCO-MANIPULATION (flat walking while carrying a REAL box).
 
-Test de l'hypothese H1 (the thesis) : coordination STABLE et SIMULTANEE
-locomotion + manipulation. Voir s4_design.md.
+Test of hypothesis H1: STABLE and SIMULTANEOUS coordination of locomotion and
+manipulation. See s4_design.md.
 
-CHOIX D'ARCHITECTURE (decision David, 2026-07-10) :
-  * Locomotion = SEQUENCEUR QUASI-STATIQUE (reutilise `StairQS` de S3), PAS le
-    marcheur dynamique S2 (70 %, marge mince). Motif : porter une vraie boite
-    DEPLACE le CoM ; la marche QS garde le CoM dans le polygone d'appui (marge
-    STATIQUE) et encaisse ce decalage, la ou le cycle limite dynamique S2
-    basculerait. On execute donc un plan de footholds PLAT (au lieu d'escalier).
-  * Objet = VRAIE BOITE : corps rigide (freejoint + geom + inertie) SOUDE aux
-    DEUX mains par contraintes d'egalite MuJoCo (weld). Pas de prehension par
-    friction des doigts (fragile). Le poids de la boite transite par les welds
-    -> perturbation reelle sur les bras, rejetee par les taches posture + EE.
+ARCHITECTURE CHOICE (decision of 2026-07-10):
+  * Locomotion = the QUASI-STATIC SEQUENCER (reuses `StairQS` from S3), NOT the
+    dynamic S2 walker (70 %, thin margin). Rationale: carrying a real box
+    DISPLACES the CoM; QS walking keeps the CoM inside the support polygon (a
+    STATIC margin) and absorbs that offset, where the dynamic S2 limit cycle
+    would tip over. A FLAT foothold plan is therefore executed (instead of stairs).
+  * Object = a REAL BOX: a rigid body (freejoint + geom + inertia) WELDED to
+    BOTH hands by MuJoCo equality constraints (weld). No grasping through finger
+    friction (fragile). The box weight passes through the welds
+    -> a real perturbation on the arms, rejected by the posture + EE tasks.
 
-MISE EN PLACE DU PORT (build) :
-  1. apply_squat (jambes flechies, comme S2/S3) ;
-  2. IK amortie sur les 14 DOF de bras -> mains amenees a une pose de PORT
-     (devant le torse, symetrique, degagee des jambes) ;
-  3. boite placee au milieu des deux mains ;
-  4. relpose des welds ecrite au runtime (= box^-1 * main, layout eq_data
-     verifie empiriquement : [anchor(3), relpose_pos(3), relpose_quat(4),
-     torquescale(1)]) -> contrainte satisfaite a residu machine ;
-  5. controleur construit APRES -> sa posture `home` = la pose de port, et les
-     references EE (relatives-base) sont figees sur cette pose.
+CARRY SETUP (build):
+  1. apply_squat (knees flexed, as in S2/S3);
+  2. damped IK on the 14 arm DoF -> hands brought to a CARRY pose
+     (in front of the torso, symmetric, clear of the legs);
+  3. box placed midway between the two hands;
+  4. weld relpose written at runtime (= box^-1 * hand, eq_data layout verified
+     empirically: [anchor(3), relpose_pos(3), relpose_quat(4), torquescale(1)])
+     -> constraint satisfied to machine residual;
+  5. controller built AFTERWARDS -> its `home` posture = the carry pose, and the
+     (base-relative) EE references are frozen on that pose.
 
-DISCIPLINE : talos_wbc.py, talos_dcm_walk.py, talos_dcm_walk_timing.py,
-talos_s3_stairs_qs*.py restent INCHANGES. `control()` est une COPIE FIDELE de
-DCMWalk.control() + les 2 taches EE (la base n'offre pas de hook). Re-synchroniser
-si le control() de base evolue.
+DISCIPLINE: talos_wbc.py, talos_dcm_walk.py, talos_dcm_walk_timing.py and
+talos_s3_stairs_qs*.py remain UNCHANGED. `control()` is a FAITHFUL COPY of
+DCMWalk.control() plus the 2 EE tasks (the base class offers no hook).
+Re-synchronise if the base `control()` changes.
 
-Usage (depuis pal_talos/, conda base) :
+Usage (from pal_talos/, conda base):
     python talos_s4_qs_carry.py --payload 2.0 --save s4qs.npz
     python talos_s4_qs_carry.py --payload 2.0 --viewer
-    python talos_s4_qs_carry.py --payload 0   --trace       # A/B sans charge
+    python talos_s4_qs_carry.py --payload 0   --trace       # A/B without load
 """
 import argparse, time, numpy as np, mujoco
 import talos_wbc as W
@@ -85,7 +85,7 @@ def build_carry_xml(box_hx, box_hy, box_hz, box_mass):
 # ============================ carry set-up helpers ============================
 def carry_ik(m, d, tgtL_base, tgtR_base, iters=200, tol=2e-3):
     """IK amortie (14 DOF de bras) : amene main G a tgtL, main D a tgtR
-    (cibles exprimees dans le repere base). Ne touche QUE les DOF de bras."""
+    (targets expressed in the base frame). Touches ONLY the arm DoF."""
     base = m.body("base_link").id
     hL = m.body(HAND["L"]).id; hR = m.body(HAND["R"]).id
     armj = [m.joint("arm_%s_%d_joint" % (s, i)) for s in ("left", "right") for i in range(1, 8)]
@@ -109,7 +109,7 @@ def carry_ik(m, d, tgtL_base, tgtR_base, iters=200, tol=2e-3):
 
 
 def place_box_and_weld(m, d):
-    """Place la boite au milieu des mains puis fixe le relpose des 2 welds
+    """Place the box midway between the hands, then fix the relpose of the 2 welds
     (= box^-1 * main), layout eq_data verifie : [anchor3, pos3, quat4, torque1]."""
     box = m.body("carry_box").id
     hL = m.body(HAND["L"]).id; hR = m.body(HAND["R"]).id
@@ -129,12 +129,12 @@ def place_box_and_weld(m, d):
 
 # ============================ controller ============================
 class S4CarryQS(QS.StairQS):
-    """Sequenceur QS sur plan PLAT + tache d'organe terminal bi-manuelle (port)."""
+    """QS sequencer on a FLAT plan + a bimanual end-effector task (carry)."""
 
     def __init__(self, m, d, dist, stride, w_ee, kp_ee, kd_ee, **kw):
-        self._dist = dist; self._stride = stride            # lus par _build_moves (override)
+        self._dist = dist; self._stride = stride            # read by _build_moves (override)
         super().__init__(m, d, risers=[(1e9, 0.0)], tread=0.28, **kw)  # risers ignores (plan plat)
-        # refs EE relatives-base FIGEES sur la pose de port (IK deja appliquee)
+        # Base-relative EE refs FROZEN at the carry pose (IK already applied)
         self.hand = {s: m.body(HAND[s]).id for s in ("L", "R")}
         Rb = d.xmat[self.base].reshape(3, 3); pb = d.xpos[self.base].copy()
         self.ee_local = {s: Rb.T @ (d.xpos[self.hand[s]].copy() - pb) for s in ("L", "R")}
@@ -144,7 +144,7 @@ class S4CarryQS(QS.StairQS):
 
     # --- plan PLAT : marche quasi-statique alternee jusqu'a `dist` ---
     def _sh(self, x):
-        return 0.0                                          # sol plat (pas d'escalier)
+        return 0.0                                          # flat ground (no stairs)
 
     def _build_moves(self):
         ly = self.ly; fz0 = float(self.fz)
@@ -161,7 +161,7 @@ class S4CarryQS(QS.StairQS):
             self.moves.append((side, np.array([newx, yof(side), fz0])))
             side = self.left if side == self.right else self.right
             k += 1
-        # pas de fermeture : ramener le pied arriere a cote de l'avant
+        # closing step: bring the trailing foot alongside the leading one
         lead = max(xs.values())
         self.moves.append((side, np.array([lead, yof(side), fz0])))
         print("[plan-QS-plat] %d moves | dist cible=%.2f m stride=%.3f" %
@@ -187,7 +187,7 @@ class S4CarryQS(QS.StairQS):
     # ============= control() : COPIE de DCMWalk.control() + taches EE =============
     # /!\ Copie fidele de talos_dcm_walk.py::DCMWalk.control (noyau QP inchange).
     #     Ajouts marques "### S4" : taches EE, log EE. (StairQS.control ne fait
-    #     qu'appeler super().control() + logs ; on remplace par la copie + EE.)
+    #     than calling super().control() + logs; replaced by the copy + EE.)
     def control(self):
         t_perf = time.perf_counter()
         m, d = self.m, self.d; nv, nu = self.nv, self.nu
@@ -214,7 +214,7 @@ class S4CarryQS(QS.StairQS):
         if self.phase == "SS":
             fb = self.swing; p = d.xpos[fb]; Jsw = np.zeros((3, nv)); mujoco.mj_jac(m, d, Jsw, None, p, fb)
             a_sw = B.KP_SW * (self.swing_pos - p) - B.KD_SW * (Jsw @ d.qvel); add(Jsw, a_sw, B.W_SWING)
-        # ### S4 : taches d'organe terminal (les DEUX mains, toutes phases) ---------
+        # ### S4: end-effector tasks (BOTH hands, every phase) ---------------------
         e_ee = {}
         for s in ("L", "R"):
             J_rel, a_ee, e = self._ee_task(s); add(J_rel, a_ee, self.w_ee); e_ee[s] = e
@@ -289,14 +289,14 @@ def _rmse(a):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dist", type=float, default=3.0, help="distance de marche cible (m)")
-    ap.add_argument("--stride", type=float, default=0.12, help="avance par pas (m)")
+    ap.add_argument("--stride", type=float, default=0.12, help="forward advance per step (m)")
     # boite
-    ap.add_argument("--payload", type=float, default=2.0, help="masse de la boite portee (kg)")
+    ap.add_argument("--payload", type=float, default=2.0, help="mass of the carried box (kg)")
     ap.add_argument("--boxhx", type=float, default=0.12); ap.add_argument("--boxhy", type=float, default=0.18)
     ap.add_argument("--boxhz", type=float, default=0.12)
-    ap.add_argument("--carryx", type=float, default=0.32, help="avance des mains (repere base) pour le port")
-    ap.add_argument("--carryy", type=float, default=0.18, help="demi-ecart lateral des mains")
-    ap.add_argument("--carryz", type=float, default=-0.15, help="hauteur des mains vs base")
+    ap.add_argument("--carryx", type=float, default=0.32, help="hand forward offset (base frame) for the carry")
+    ap.add_argument("--carryy", type=float, default=0.18, help="half lateral separation of the hands")
+    ap.add_argument("--carryz", type=float, default=-0.15, help="hand height relative to the base")
     # taches EE
     ap.add_argument("--wee", type=float, default=W_EE_DEF); ap.add_argument("--kpee", type=float, default=KP_EE_DEF)
     ap.add_argument("--kdee", type=float, default=KD_EE_DEF)
@@ -317,7 +317,7 @@ def main():
     print("[scene] scene_carry.xml : boite %.2f x %.2f x %.2f m  masse %.2f kg"
           % (2*a.boxhx, 2*a.boxhy, 2*a.boxhz, a.payload))
 
-    # gains QS (config gelee du succes S3-QS 3/3)
+    # QS gains (frozen configuration from the 3/3 S3-QS success)
     W.KP_FOOT, W.KD_FOOT = 650.0, 65.0
     B.KP_SW, B.KD_SW = 420.0, 42.0
     B.KP_COM_W, B.KD_COM_W, B.W_COM_W = 500.0, 180.0, 2500.0
@@ -326,12 +326,12 @@ def main():
     W.MODEL = "scene_carry.xml"
 
     m = mujoco.MjModel.from_xml_path(W.MODEL); d = mujoco.MjData(m)
-    # masse de boite deja dans le XML ; on la force aussi ici si --payload change apres coup
+    # box mass is already in the XML; forced here too in case --payload changes later
     if a.payload > 0:
         m.body_mass[m.body("carry_box").id] = a.payload
     mujoco.mj_resetDataKeyframe(m, d, 0); mujoco.mj_forward(m, d)
     if a.seed is not None:
-        rng = np.random.default_rng(a.seed); d.qvel[:m.nv] += 0.0  # bruit applique apres build
+        rng = np.random.default_rng(a.seed); d.qvel[:m.nv] += 0.0  # noise applied after build
     com0 = d.subtree_com[m.body("base_link").id].copy(); x0m, z0m = float(com0[0]), float(com0[2])
 
     tgtL = np.array([a.carryx, +a.carryy, a.carryz]); tgtR = np.array([a.carryx, -a.carryy, a.carryz])
@@ -388,7 +388,7 @@ def main():
 
     # ---------- bilan S4 ----------
     com = d.subtree_com[c.base]; dist = float(com[0] - x0m)
-    box_z = float(d.xpos[c.box][2]); box_held = box_z > (z0m - 0.35)   # boite pas tombee au sol
+    box_z = float(d.xpos[c.box][2]); box_held = box_z > (z0m - 0.35)   # box has not fallen to the ground
     upright = d.qpos[2] > 0.8 and fell_at is None
     eeL = np.array(c.log["ee_L"]); eeR = np.array(c.log["ee_R"]); reg = np.array(c.log["ee_regime"])
     cm = np.array(c.log["ctrl_ms"]); gr = np.array(c.log["grf"]) if c.log["grf"] else np.array([np.nan])
@@ -399,7 +399,7 @@ def main():
     ee_ok = (np.nanmax(ee_walk) < 0.05) if ee_walk.size else False
     reached = dist >= a.dist and c.state == "DONE"
     success = upright and reached and box_held and ee_ok
-    success_func = bool(upright and reached and box_held)   # succes FONCTIONNEL (sans le gate EE)
+    success_func = bool(upright and reached and box_held)   # FUNCTIONAL success (without the EE gate)
     nq = int(getattr(c, "_qp_fail", 0)); ntick = max(len(cm), 1)
     print("=" * 72)
     print("S4-QS-CARRY  dist=%.1f stride=%.2f payload=%.1fkg W_EE=%.0f seed=%s"

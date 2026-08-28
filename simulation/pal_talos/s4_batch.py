@@ -1,38 +1,38 @@
 """
-S4 — Batch N seeds sur la config gelee (QS loco-manipulation, port bi-manuel).
+S4 — Batch of N seeds on the frozen config (QS loco-manipulation, two-handed carry).
 
-Lance talos_s4_qs_carry.py en SOUS-PROCESSUS par seed (isolation : une chute ou un
-crash n'affecte pas les autres essais), agrege les npz par seed et produit :
-  - success rate FONCTIONNEL (debout + 3 m + DONE + boite portee) + Wilson 95 % CI
-    -> c'est le verdict H1 (loco-manipulation quasi-statique reussie)
-  - success rate STRICT (idem + EE pic < 5 cm) pour reference
-  - EE error RMSE / pic en regime marche (metrique de manipulation, the thesis)
-  - CoM tracking RMSE (metrique de locomotion, comparable a S2)
-  - taux boite-portee, GRF pic, ctrl loop mean / p99 agreges
-Sorties dans OUTDIR : s4_seed<k>.npz + s4_seed<k>.log, s4_batch_summary.npz,
+Runs talos_s4_qs_carry.py in a SUBPROCESS per seed (isolation: a fall or a
+crash does not affect the other trials), aggregates the per-seed npz and produces:
+  - FUNCTIONAL success rate (standing + 3 m + DONE + box carried) + Wilson 95 % CI
+    -> this is the H1 verdict (quasi-static loco-manipulation achieved)
+  - STRICT success rate (same + EE peak < 5 cm) for reference
+  - EE error RMSE / peak in the walking regime (manipulation metric, the thesis)
+  - CoM tracking RMSE (locomotion metric, comparable to S2)
+  - box-carried rate, peak GRF, aggregated ctrl loop mean / p99
+Outputs in OUTDIR: s4_seed<k>.npz + s4_seed<k>.log, s4_batch_summary.npz,
 s4_batch_report.md, s4_batch_rows.csv.
 
-Note non-determinisme (cf S2/S3) : l'unite reproductible est le TAUX AGREGE, pas le
-label par seed. Un meme code peut finir 3.05 m sur un run et tomber a 2.2 m sur un
-autre (bifurcation d'ensemble actif du QP tranchee par l'entropie process).
+Non-determinism note (cf. S2/S3): the reproducible unit is the AGGREGATE RATE, not the
+per-seed label. The same code can finish at 3.05 m on one run and fall at 2.2 m on
+another (QP active-set bifurcation settled by process entropy).
 
-Usage (terminal Anaconda, depuis pal_talos/) :
+Usage (Anaconda terminal, from pal_talos/):
     python s4_batch.py                         # 20 seeds (0..19), payload 2 kg
     python s4_batch.py --n 30 --start 0
-    python s4_batch.py --outdir s4_batch_p0 -- --payload 0    # A/B a vide : args apres --
-    python s4_batch.py --outdir s4_batch_wee100 -- --wee 100  # ablation arbitrage
+    python s4_batch.py --outdir s4_batch_p0 -- --payload 0    # unloaded A/B: args after --
+    python s4_batch.py --outdir s4_batch_wee100 -- --wee 100  # trade-off ablation
 """
 import argparse, csv, os, subprocess, sys, time
 import numpy as np
 
-FROZEN = ["--payload", "2.0"]       # config de campagne (dist 3.0 = defaut du script)
+FROZEN = ["--payload", "2.0"]       # campaign config (dist 3.0 = the script's default)
 SCRIPT = "talos_s4_qs_carry.py"
-TIMEOUT = 1200         # s par essai (QS ~65 s sim ; marge large pour le wall-clock QP)
+TIMEOUT = 1200         # s per trial (QS ~65 s sim; wide margin for the QP wall-clock)
 Z = 1.959963984540054  # 95 %
 
 
 def wilson(k, n, z=Z):
-    """Intervalle de Wilson 95 % pour k succes sur n essais -> (low, high)."""
+    """95 % Wilson interval for k successes out of n trials -> (low, high)."""
     if n == 0:
         return 0.0, 1.0
     p = k / n
@@ -63,23 +63,23 @@ def run_seed(seed, outdir, extra):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=20, help="nombre d'essais (Table 3.1 : N >= 20)")
-    ap.add_argument("--start", type=int, default=0, help="premier seed")
+    ap.add_argument("--n", type=int, default=20, help="number of trials (Table 3.1: N >= 20)")
+    ap.add_argument("--start", type=int, default=0, help="first seed")
     ap.add_argument("--outdir", type=str, default="s4_batch")
     ap.add_argument("--thresh", type=float, default=0.90,
-                    help="critere : borne basse Wilson > thresh (Table 3.1)")
+                    help="criterion: Wilson lower bound > thresh (Table 3.1)")
     ap.add_argument("extra", nargs=argparse.REMAINDER,
-                    help="args passes au script S4 apres -- (ex : -- --payload 0)")
+                    help="args passed to the S4 script after -- (e.g.: -- --payload 0)")
     a = ap.parse_args()
     extra = [e for e in a.extra if e != "--"]
-    # garde-fou cmd.exe : commentaires '# ...' colles a la commande -> retires
+    # cmd.exe guard: comments '# ...' appended to the command -> stripped
     for i, e in enumerate(extra):
         if e.startswith("#"):
             extra = extra[:i]; break
     junk = [e for i, e in enumerate(extra)
             if not e.startswith("-") and (i == 0 or not extra[i - 1].startswith("-"))]
     if junk:
-        raise SystemExit("[ABORT] arguments extra suspects (pas des options) : %s" % junk)
+        raise SystemExit("[ABORT] suspicious extra arguments (not options): %s" % junk)
     os.makedirs(a.outdir, exist_ok=True)
     seeds = list(range(a.start, a.start + a.n))
     print("S4 BATCH  N=%d seeds=%d..%d  config %s  extra=%s  -> %s/"
@@ -124,13 +124,13 @@ def main():
             try:
                 tail = [l.rstrip() for l in open(log_path, encoding="utf-8", errors="replace")][-3:]
             except OSError:
-                tail = ["(log illisible)"]
+                tail = ["(log unreadable)"]
             for l in tail:
                 print("      | %s" % l)
             if s == seeds[0]:
-                raise SystemExit("[ABORT] le 1er essai a crashe — corriger avant de relancer (log : %s)" % log_path)
+                raise SystemExit("[ABORT] the 1st trial crashed — fix before re-running (log: %s)" % log_path)
 
-    # ---------- agregation ----------
+    # ---------- aggregation ----------
     n = len(rows)
     kf = sum(r["success_func"] for r in rows); ks = sum(r["success_strict"] for r in rows)
     lof, hif = wilson(kf, n); los, his = wilson(ks, n)

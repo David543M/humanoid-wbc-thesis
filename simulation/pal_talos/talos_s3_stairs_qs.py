@@ -1,38 +1,38 @@
 """
-TALOS — S3 : MONTEE D'ESCALIER par SEQUENCEUR QUASI-STATIQUE.
+TALOS — S3: STAIR CLIMBING via a QUASI-STATIC SEQUENCER.
 
-Motivation (voir Ch5 §5.6) : le marcheur plat
-DCM (talos_dcm_walk_timing) repose sur un TIMING EVENEMENTIEL (touchdown
-adaptatif, capture-point, recovery) qui s'est revele FONDAMENTALEMENT
-INCOMPATIBLE avec les gros transferts de poids deliberes d'un escalier :
-le timing raccourcit le pas a T_MIN des que le DCM derive, terminant le
-mount avant que le corps ait bascule sur la marche.
+Motivation (see Ch5 §5.6): the flat-ground
+DCM walker (talos_dcm_walk_timing) relies on EVENT-DRIVEN TIMING (adaptive
+touchdown, capture-point, recovery) which turned out to be FUNDAMENTALLY
+INCOMPATIBLE with the large, deliberate weight transfers of a staircase:
+the timing shortens the step to T_MIN as soon as the DCM drifts, ending the
+mount before the body has shifted onto the step.
 
-Ce fichier ABANDONNE ce timing. Il garde UNIQUEMENT l'executeur QP-WBC
-valide (DCMWalk.control() : dynamique corps-rigide dure, cone de friction,
-limites de couple, taches CoM / orientation / posture / pied ; PROXQP) et
-pilote une MACHINE A ETATS EXPLICITE quasi-statique :
+This file ABANDONS that timing. It keeps ONLY the validated QP-WBC
+executor (DCMWalk.control(): hard rigid-body dynamics, friction cone,
+torque limits, CoM / orientation / posture / foot tasks; PROXQP) and
+drives an EXPLICIT quasi-static STATE MACHINE:
 
-    SETTLE                     : les 2 pieds au sol, CoM centre, posture etablie
-    pour chaque pas de plan :
-      TRANSFER (double appui)  : les 2 pieds PORTENT (contact dur dans le QP),
-                                 le CoM bascule (x,y) sur le pied d'APPUI +
-                                 la hauteur de CoM monte a la marche d'appui,
-                                 jusqu'a convergence (pas de course contre une
-                                 horloge : on attend le transfert).
-      SWING   (appui simple)   : SEUL le pied d'appui porte ; le pied libre
-                                 suit un arc UP-OVER-DOWN vers le centre du
-                                 giron fige ; le CoM reste sur l'appui.
-      -> pose (contact) -> pas suivant.
-    DONE                       : equilibre final sur le palier.
+    SETTLE                     : both feet on the ground, CoM centered, posture established
+    for each step of the plan:
+      TRANSFER (double support) : both feet BEAR load (hard contact in the QP),
+                                 the CoM shifts (x,y) onto the STANCE foot +
+                                 the CoM height rises to the stance step,
+                                 until convergence (no race against a
+                                 clock: the transfer is awaited).
+      SWING   (single support)  : ONLY the stance foot bears load; the free
+                                 foot follows an UP-OVER-DOWN arc toward the
+                                 center of the pinned tread; the CoM stays over the stance.
+      -> touchdown (contact) -> next step.
+    DONE                       : final balance on the landing.
 
-Le point cle : en DS, control() met les DEUX pieds dans l'ensemble de
-contact (contrainte no-slip dure sur chacun) -> le transfert de poids
-lateral+vertical se fait a deux pieds, ce qui manquait au marcheur plat.
-Aucune horloge de pas ne peut interrompre le transfert : la transition
-DS->SS n'a lieu QUE lorsque le CoM a effectivement bascule.
+The key point: in DS, control() puts BOTH feet in the
+contact set (hard no-slip constraint on each) -> the lateral+vertical
+weight transfer happens on two feet, which the flat-ground walker lacked.
+No step clock can interrupt the transfer: the DS->SS transition
+only happens once the CoM has actually shifted.
 
-Usage (depuis pal_talos/, conda base) :
+Usage (from pal_talos/, conda base):
     python talos_s3_stairs_qs.py                     # bring-up
     python talos_s3_stairs_qs.py --viewer
     python talos_s3_stairs_qs.py --trace --save s3qs.npz
@@ -45,47 +45,47 @@ import talos_s3_stairs as S3               # make_risers, top_x_of, build_stairs
 
 
 class StairQS(B.DCMWalk):
-    """Sequenceur quasi-statique de montee d'escalier au-dessus de l'executeur QP."""
+    """Quasi-static stair-climbing sequencer layered on top of the QP executor."""
 
     def __init__(self, m, d, risers, tread, max_mount=0.28,
                  rate=0.5, zrate=0.4, clear=0.14, tswing=0.8,
                  t_settle=0.8, t_tr_min=0.4, t_tr_max=1.6, postol=0.05):
-        B.N_STEPS = 2; B.STEP_LEN = 0.1        # plan plat de la base : ignore
+        B.N_STEPS = 2; B.STEP_LEN = 0.1        # base class's flat plan: ignored
         super().__init__(m, d)                 # W.WBC + control() + feet/home/zc/omega
         self.dt = float(m.opt.timestep)
         self._risers = risers; self._tread = tread; self._max_mount = max_mount
-        self.fz0 = float(self.fz)              # hauteur cheville pied au sol (~0.104)
+        self.fz0 = float(self.fz)              # ankle height of the grounded foot (~0.104)
         self.zc0 = float(self.zc)
-        # --- drapeaux executeur (control() les lit) ---
+        # --- executor flags (read by control()) ---
         self.use_hard_contact = True; self.use_foot_ori = True
-        # w_foot_stance RELEVE 500->1400 (POLISH #6a) : le pied d'APPUI doit rester
-        # TOTALEMENT plat/pose pendant le swing. A 500 (vs swing 2500) la reaction du
-        # pied qui se leve fait BASCULER la semelle d'appui sur une arete (rocking, le
-        # pied "quitte le sol un peu"). On raidit la tache pied-porteur (position+ori du
-        # sole a plat) sans toucher a la trajectoire de swing ni au CoM (2500). Bonus :
-        # sur le palier haut, un pied d'appui plus ferme donne plus d'appui a la base
-        # contre le tangage de la jonction finale (aide la recuperation au sommet).
-        self.w_foot_swing = 2500.0; self.w_foot_stance = 1400.0  # swing < CoM (equilibre prioritaire)
+        # w_foot_stance RAISED 500->1400 (POLISH #6a): the STANCE foot must stay
+        # FULLY flat/planted during the swing. At 500 (vs swing 2500) the reaction of
+        # the lifting foot makes the stance sole TIP onto an edge (rocking, the
+        # foot "leaves the ground a little"). We stiffen the load-bearing foot task
+        # (flat sole position+orientation) without touching the swing trajectory or the CoM (2500). Bonus:
+        # on the top landing, a stiffer stance foot gives the base more support
+        # against the pitch of the final junction (helps recovery at the top).
+        self.w_foot_swing = 2500.0; self.w_foot_stance = 1400.0  # swing < CoM (balance takes priority)
         self.sl_imp = False; self.sl_ramp = False; self.T_RAMP = 0.06; self.land_t = {}
         self.use_dcm_fb = False
-        # --- reglages sequenceur ---
+        # --- sequencer settings ---
         self.RATE = rate; self.ZRATE = zrate; self.CROSS_CLEAR = clear
         self.T_SWING = tswing; self.POS_TOL = postol
         self.T_SETTLE = t_settle; self.T_TR_MIN = t_tr_min; self.T_TR_MAX = t_tr_max
-        self.VTOL = 0.03                       # vitesse CoM max pour finir le transfert (m/s)
-        # SEEK d'atterrissage : si l'arc finit sans contact, on presse le pied vers le
-        # giron (jusqu'a SEEK_MAX sous la cible) au lieu de basculer en DONE pied en l'air.
+        self.VTOL = 0.03                       # max CoM speed to finish the transfer (m/s)
+        # landing SEEK: if the arc finishes without contact, the foot is pressed toward
+        # the tread (up to SEEK_MAX below the target) instead of switching to DONE with the foot airborne.
         self.SEEK_RATE = 0.10; self.SEEK_MAX = 0.06; self.T_SEEK_MAX = 1.6
-        # biais AVANT de la cible CoM : la cheville n'est pas au centre de la semelle
-        # (talon −0.125 / pointe +0.075) et la montee tend a laisser le CoM EN RETRAIT
-        # (bascule arriere en haut). On vise legerement vers la pointe.
+        # FORWARD bias of the CoM target: the ankle is not at the center of the sole
+        # (heel -0.125 / toe +0.075) and climbing tends to leave the CoM TRAILING
+        # (tips backward at the top). We aim slightly toward the toe.
         self.COM_FWD = 0.05
         self._com_prev = self.d.subtree_com[self.base][:2].copy()
         self._com_speed = 0.0
-        # --- etat physique des pieds (positions plantees courantes) ---
+        # --- physical foot state (current planted positions) ---
         self.foot_pos = {fb: self.d.xpos[fb].copy() for fb in self.feet}
         self._build_moves()
-        # --- etat machine ---
+        # --- state machine ---
         self.state = "SETTLE"; self.t = 0.0; self.t_state = 0.0; self.mi = -1
         self.phase = "DS"; self.stance = self.right; self.swing = self.left
         self.swing_pos = self.d.xpos[self.left].copy()
@@ -96,7 +96,7 @@ class StairQS(B.DCMWalk):
         self.log = dict(clear=[], grf=[], ctrl_ms=[])
         self._swmin = None; self._swact = False
 
-    # ---------- geometrie escalier ----------
+    # ---------- stair geometry ----------
     def _sh(self, x):
         h = 0.0
         for xe, z in self._risers:
@@ -105,12 +105,12 @@ class StairQS(B.DCMWalk):
         return h
 
     def _build_moves(self):
-        """Sequence de deplacements de pieds : approche a petits pas (pied bride
-        avant la 1ere contremarche) puis montee step-together (centre du giron)."""
+        """Sequence of foot moves: small-step approach (foot clamped
+        before the 1st riser) then step-together climb (center of the tread)."""
         ly = self.ly; tread = self._tread; risers = self._risers
         yof = lambda side: ly if side == self.left else -ly
         rx = float(self.d.xpos[self.right][0])
-        foots = []                              # (side, x) ; index 0 = appui initial (pas un move)
+        foots = []                              # (side, x); index 0 = initial stance (not a move)
         side = self.right; foots.append((side, rx)); x = rx
         ctr0 = risers[0][0] + 0.5 * tread
         TOE, MARG = 0.075, 0.03
@@ -121,7 +121,7 @@ class StairQS(B.DCMWalk):
             x = min(x + 0.08, x_app_max); foots.append((side, x)); g += 1
             if x >= x_app_max - 1e-9:
                 break
-        self._n_approach = len(foots)           # nb de footholds d'approche (incl. initial)
+        self._n_approach = len(foots)           # number of approach footholds (incl. initial)
         for t in range(len(risers)):
             ctr = risers[t][0] + 0.5 * tread
             side = self.left if side == self.right else self.right; foots.append((side, ctr))
@@ -129,7 +129,7 @@ class StairQS(B.DCMWalk):
         self.moves = []
         for (side, x) in foots[1:]:
             self.moves.append((side, np.array([x, yof(side), self.fz0 + self._sh(x)])))
-        print("[plan-QS] %d moves (appui initial D@x=%.3f) :" % (len(self.moves), rx))
+        print("[plan-QS] %d moves (initial stance R@x=%.3f):" % (len(self.moves), rx))
         for i, (s, t3) in enumerate(self.moves):
             tag = "app" if i < self._n_approach - 1 else "CLIMB"
             print("   m%02d swing %s -> x=%.3f y=%+.3f z=%.3f  [%s]"
@@ -142,8 +142,8 @@ class StairQS(B.DCMWalk):
         self.zc += float(np.clip(zc - self.zc, -self.ZRATE * self.dt, self.ZRATE * self.dt))
 
     def _arc(self, frm, tgt, s):
-        """Trajectoire cheville UP-OVER-DOWN : monte vertical au-dessus du depart,
-        avance a hauteur de pic (semelle au-dessus du nez), descend sur le giron."""
+        """UP-OVER-DOWN ankle trajectory: rises vertically above the start,
+        advances at peak height (sole above the nose), descends onto the tread."""
         peak = max(float(frm[2]), float(tgt[2])) + self.CROSS_CLEAR
         LIFT, FWD = 0.30, 0.72
         if s < LIFT:
@@ -197,7 +197,7 @@ class StairQS(B.DCMWalk):
         self.swing_from = self.foot_pos[side].copy()
         self.state = "TRANSFER"; self.t_state = self.t
 
-    # ---------- machine a etats ----------
+    # ---------- state machine ----------
     def update(self, dt):
         self.t += dt
         com_now = self.d.subtree_com[self.base][:2].copy()
@@ -213,14 +213,14 @@ class StairQS(B.DCMWalk):
 
         elif st == "TRANSFER":
             self.phase = "DS"
-            st_live = np.asarray(self.d.xpos[self.stance][:2], float)   # pied VIVANT
-            tgt = np.array([st_live[0], st_live[1]])                    # CoM sur l'appui vivant
+            st_live = np.asarray(self.d.xpos[self.stance][:2], float)   # LIVE foot
+            tgt = np.array([st_live[0], st_live[1]])                    # CoM over the live stance
             self._approach(tgt, self.zc0 + self._sh(float(self.d.xpos[self.stance][0])))
             self.swing_pos = self.foot_pos[self.swing].copy()
             tau = self.t - self.t_state
             com = self.d.subtree_com[self.base][:2]
             com_ok = np.linalg.norm(com - tgt) < self.POS_TOL
-            settled = self._com_speed < self.VTOL      # CoM ARRETE sur l'appui (anti-coast)
+            settled = self._com_speed < self.VTOL      # CoM STOPPED over the stance (anti-coast)
             if (tau > self.T_TR_MIN and com_ok and settled) or tau > self.T_TR_MAX:
                 self.state = "SWING"; self.t_state = self.t
 
@@ -230,7 +230,7 @@ class StairQS(B.DCMWalk):
             s = min(tau / self.T_SWING, 1.0)
             self.swing_pos = self._arc(self.swing_from, self.target, s)
             st_live = self.d.xpos[self.stance][:2]
-            # APPUI SIMPLE : CoM strictement au-dessus du pied porteur (pas de biais avant).
+            # SINGLE SUPPORT: CoM strictly above the load-bearing foot (no forward bias).
             self._approach([float(st_live[0]), float(st_live[1])],
                            self.zc0 + self._sh(float(self.d.xpos[self.stance][0])))
             self._clear_tick()
@@ -243,15 +243,15 @@ class StairQS(B.DCMWalk):
 
         elif st == "DONE":
             self.phase = "DS"
-            # SETTLE FINAL — recuperation confinee a DONE (moves 0-7 = montee 3/3 propre,
-            # intouches). Le dernier pied de swing (m08) peut ne PAS s'etre pose : sur le
-            # palier haut le bassin tangue et la cible mondiale est ratee (GRF=0, pied en
-            # l'air) -> l'ancienne version basculait en arriere sur UN seul pied.
-            # Deux temps :
-            #   (1) pied libre PAS pose -> on le PRESSE vers le giron (seek z) ET on tient
-            #       le CoM ferme sur le pied D'APPUI (deja sur le palier) + biais avant :
-            #       ca DE-tangue la base et fait descendre le pied jusqu'au contact ;
-            #   (2) deux pieds au sol -> CoM au centre du polygone sommet.
+            # FINAL SETTLE — recovery confined to DONE (moves 0-7 = clean 3/3 climb,
+            # untouched). The last swing foot (m08) may NOT have landed: on the
+            # top landing the pelvis pitches and the world-frame target is missed (GRF=0, foot
+            # airborne) -> the old version tipped backward onto a SINGLE foot.
+            # Two stages:
+            #   (1) free foot NOT down -> PRESS it toward the tread (seek z) AND hold
+            #       the CoM firmly over the STANCE foot (already on the landing) + forward
+            #       bias: this UN-pitches the base and brings the foot down to contact;
+            #   (2) both feet on the ground -> CoM at the center of the top support polygon.
             if not self._contact(self.swing):
                 over = self.t - self.t_state
                 seek = min(self.SEEK_MAX, self.SEEK_RATE * over)
@@ -270,7 +270,7 @@ class StairQS(B.DCMWalk):
         t0 = time.perf_counter()
         super().control()
         self.log["ctrl_ms"].append((time.perf_counter() - t0) * 1e3)
-        for fb in self.feet:                    # suivi GRF (pic)
+        for fb in self.feet:                    # GRF tracking (peak)
             self.log["grf"].append(self._grf_z(fb))
 
 
@@ -280,14 +280,14 @@ def main():
     ap.add_argument("--tread", type=float, default=0.28)
     ap.add_argument("--hriser", type=float, default=0.10)
     ap.add_argument("--maxmount", type=float, default=0.28)
-    ap.add_argument("--rate", type=float, default=0.18, help="vitesse ref CoM xy (m/s) — lent = CoM suit sans overshoot")
+    ap.add_argument("--rate", type=float, default=0.18, help="CoM xy reference speed (m/s) - slow = the CoM follows without overshoot")
     ap.add_argument("--zrate", type=float, default=0.35, help="vitesse rampe hauteur CoM (m/s)")
-    ap.add_argument("--clear", type=float, default=0.14, help="garde swing au-dessus du nez (m)")
-    ap.add_argument("--tswing", type=float, default=0.65, help="duree de l'arc de swing (s) — 0.65 = montee 3/3 propre ; PLUS LONG (1.0) reintroduit la derive laterale en appui simple (regression QS #5b)")
+    ap.add_argument("--clear", type=float, default=0.14, help="swing clearance above the nosing (m)")
+    ap.add_argument("--tswing", type=float, default=0.65, help="swing arc duration (s) - 0.65 = clean 3/3 climb; LONGER (1.0) reintroduces the lateral drift in single support (QS #5b regression)")
     ap.add_argument("--tsettle", type=float, default=0.8)
     ap.add_argument("--ttrmin", type=float, default=0.5)
-    ap.add_argument("--ttrmax", type=float, default=3.0, help="temps max de transfert (attend le CoM arrete)")
-    ap.add_argument("--postol", type=float, default=0.035, help="tolerance CoM<->appui pour finir le transfert (m)")
+    ap.add_argument("--ttrmax", type=float, default=3.0, help="maximum transfer time (waits for the CoM to stop)")
+    ap.add_argument("--postol", type=float, default=0.035, help="CoM-to-support tolerance for completing the transfer (m)")
     ap.add_argument("--zcdrop", type=float, default=0.04)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--trace", action="store_true")
@@ -300,25 +300,25 @@ def main():
     top_target = risers[-1][1]
     with open("scene_stairs.xml", "w") as f:
         f.write(S3.build_stairs_xml(a.x0, a.tread, a.hriser))
-    print("[scene] scene_stairs.xml genere : x0=%.2f tread=%.2f h=%.2f n=%d"
+    print("[scene] scene_stairs.xml generated: x0=%.2f tread=%.2f h=%.2f n=%d"
           % (a.x0, a.tread, a.hriser, len(risers)))
 
     W.KP_FOOT, W.KD_FOOT = 650.0, 65.0
     B.KP_SW, B.KD_SW = 420.0, 42.0
-    # CoM = PRIORITE en appui simple. Le trace #1 a montre que les taches du pied de
-    # swing (W_SWING/w_foot_swing = 6000) ECRASENT la tache CoM (400) -> le CoM derive
-    # hors du pied porteur (demi-semelle ±0.06 m) et le pendule inverse (omega~3.3/s)
-    # diverge. On donne au CoM une autorite comparable au swing + gains raidis/amortis,
-    # et on abaisse le poids du swing pour qu'il ne vole pas l'equilibre.
+    # CoM = PRIORITY in single support. Trace #1 showed that the swing-foot
+    # tasks (W_SWING/w_foot_swing = 6000) OVERWHELM the CoM task (400) -> the CoM drifts
+    # off the load-bearing foot (half-sole ±0.06 m) and the inverted pendulum (omega~3.3/s)
+    # diverges. The CoM is given authority comparable to the swing + stiffened/damped gains,
+    # and the swing weight is lowered so it doesn't steal the balance.
     B.KP_COM_W, B.KD_COM_W, B.W_COM_W = 500.0, 180.0, 2500.0
     B.W_SWING = 2500.0
-    # BASSIN A PLAT : W_ORI par defaut (40) est ridicule vs CoM/swing (2500) -> le
-    # bassin part en tangage pendant les grands swings de montee, ce qui PROJETTE le
-    # pied de swing au-dela de sa cible (collision, cf trace stair-3). On raidit fort.
-    # 600 = valeur de la montee 3/3 PROPRE (QS #5). Monter a 1100 n'a PAS aide et a
-    # coincide avec la regression laterale (QS #5b) -> on garde 600. Le pitch -19 deg
-    # transitoire du swing-jonction m08 est rattrape par le SEEK (le pied SE POSE) +
-    # recuperation DONE a DEUX pieds, pas par un raidissement orientation global.
+    # FLAT PELVIS: the default W_ORI (40) is negligible vs CoM/swing (2500) -> the
+    # pelvis pitches during the large climbing swings, which OVERSHOOTS the
+    # swing foot past its target (collision, cf trace stair-3). We stiffen it heavily.
+    # 600 = the value of the CLEAN 3/3 climb (QS #5). Raising to 1100 did NOT help and
+    # coincided with the lateral regression (QS #5b) -> 600 is kept. The transient
+    # -19 deg pitch of the swing-junction m08 is caught by SEEK (the foot LANDS) +
+    # two-foot DONE recovery, not by a global orientation stiffening.
     W.KP_ORI, W.KD_ORI, W.W_ORI = 450.0, 80.0, 600.0
     W.MODEL = "scene_stairs.xml"
     m = mujoco.MjModel.from_xml_path(W.MODEL); d = mujoco.MjData(m)
@@ -367,7 +367,7 @@ def main():
                 slp = (start + d.time) - time.time()
                 if slp > 0: time.sleep(slp)
                 if d.qpos[2] < 0.5:
-                    print("[viewer] chute t=%.2f s (%s) — relance" % (c.t, c.state))
+                    print("[viewer] fall t=%.2f s (%s) — restarting" % (c.t, c.state))
                     time.sleep(0.6); mujoco.mj_resetDataKeyframe(m, d, 0); mujoco.mj_forward(m, d)
                     c = build(d); start = time.time()
         return
@@ -380,7 +380,7 @@ def main():
             trc(c); _pstate = c.state
         if d.qpos[2] < 0.6:
             fell_at = c.t
-            if a.trace: print("[trc] ===== CHUTE ====="); trc(c)
+            if a.trace: print("[trc] ===== FALL ====="); trc(c)
             break
         if c.state == "DONE" and (c.t - c.t_state) > 3.0:
             break
@@ -396,25 +396,25 @@ def main():
     cm = np.array(c.log["ctrl_ms"]) if c.log["ctrl_ms"] else np.array([np.nan])
     nq = int(getattr(c, "_qp_fail", 0)); ntick = max(len(cm), 1)
     print("=" * 70)
-    print("S3-QS  escalier x0=%.2f tread=%.2f h=%.2f | moves=%d rate=%.2f tswing=%.2f seed=%s"
+    print("S3-QS  stairs x0=%.2f tread=%.2f h=%.2f | moves=%d rate=%.2f tswing=%.2f seed=%s"
           % (a.x0, a.tread, a.hriser, len(c.moves), a.rate, a.tswing, a.seed))
-    print("  outcome    : %s%s | etat final=%s"
+    print("  outcome    : %s%s | final state=%s"
           % ("UPRIGHT" if upright else "FELL",
              "" if fell_at is None else "  (t=%.2f s)" % fell_at, c.state))
-    print("  montee     : %d/%d marches (max appui %.2f m) | gain CoM z %.3f m -> %s"
+    print("  climb      : %d/%d steps (max stance %.2f m) | CoM z gain %.3f m -> %s"
           % (n_climbed, len(risers), c._maxclimb, climb, "SUCCESS" if success else "FAIL"))
-    print("  avancee x  : %.2f m | move atteint mi=%d/%d" % (dist, c.mi, len(c.moves) - 1))
-    print("  clearance  : min %.3f m | mean %.3f m | franchissements=%d"
+    print("  x progress : %.2f m | move reached mi=%d/%d" % (dist, c.mi, len(c.moves) - 1))
+    print("  clearance  : min %.3f m | mean %.3f m | crossings=%d"
           % (np.nanmin(cl), np.nanmean(cl), len(c.log["clear"])))
     print("  GRF (pic)  : %.0f N | mean %.0f N" % (np.nanmax(gr), np.nanmean(gr)))
     print("  ctrl loop  : mean %.2f ms | p99 %.2f ms | QP feas %.1f%%"
           % (np.nanmean(cm), np.nanpercentile(cm, 99), 100.0 * (1 - nq / ntick)))
     print("=" * 70)
     if a.save:
-        # NB : ajout 2026-08-06 de cles de REPORTING pour s3_batch.py. Bloc post-boucle,
-        # apres la fin de la simulation -> strictement inerte vis-a-vis de la dynamique
-        # et du controleur (aucune ligne de control()/update() touchee). La config gelee
-        # du succes 3/3 (QS #5c + w_foot_stance=1400) reste intacte.
+        # NB: 2026-08-06 addition of REPORTING keys for s3_batch.py. Post-loop block,
+        # after the simulation ends -> strictly inert with respect to the dynamics
+        # and the controller (no line of control()/update() touched). The frozen config
+        # of the 3/3 success (QS #5c + w_foot_stance=1400) remains intact.
         np.savez(a.save, clear=cl, grf=gr, ctrl_ms=cm, dist=dist, climb=climb,
                  e_mech=c.E_mech, e_sq=c.E_sq, mass=c.mass,
                  n_climbed=n_climbed, max_climb=c._maxclimb, success=success,

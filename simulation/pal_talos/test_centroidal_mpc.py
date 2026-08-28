@@ -1,16 +1,16 @@
 """
-test_centroidal_mpc.py — validation HORS LIGNE de la couche MPC centroidale.
+test_centroidal_mpc.py - OFFLINE validation of the centroidal MPC layer.
 
-Le MPC pilote ici la dynamique centroidale NON LINEAIRE EXACTE :
+Here the MPC drives the EXACT NONLINEAR centroidal dynamics:
     l_dot = sum f_i + m g
     k_dot = sum (p_i - c) x f_i          <-- vrai bras de levier, NON linearise
-alors que le MPC optimise sur le modele LINEARISE (bras de levier evalue sur la
-reference). L'erreur de linearisation est donc reellement exercee : c'est le
-point de la validation.
+while the MPC optimises over the LINEARISED model (lever arm evaluated on the
+reference). The linearisation error is therefore genuinely exercised: that is
+the point of the validation.
 
-Ce test ne valide PAS la marche : il valide la COUCHE DE PLANIFICATION sur son
-propre modele. Aucun resultat de marche ne doit en etre deduit — la comparaison
-avec S2 exige l'integration MuJoCo.
+This test does NOT validate walking: it validates the PLANNING LAYER against its
+own model. No walking result may be inferred from it - comparison with S2
+requires MuJoCo integration.
 
 USAGE
     python test_centroidal_mpc.py                 # scenario nominal
@@ -27,8 +27,8 @@ ZC = 0.86
 
 
 def in_support(cop_xy, pts, act, margin=1e-6):
-    """CoP dans l'enveloppe des points actifs (test par boite englobante :
-    suffisant ici, les appuis sont rectangulaires et alignes sur les axes)."""
+    """CoP inside the hull of the active points (bounding-box test:
+    sufficient here, the supports are rectangular and axis-aligned)."""
     p = pts[act > 0.5]
     if p.size == 0:
         return True
@@ -42,8 +42,8 @@ def run(horizon=12, dt_mpc=0.04, dt_sim=0.002, duration=6.0,
                          n_steps=70, t_settle=0.8)
     mpc = CentroidalMPC(MASS, sched, horizon=horizon, dt=dt_mpc, zc=ZC)
 
-    # Demarrage SUR le cycle limite lateral (cf. centroidal_mpc.limit_cycle_state).
-    # Sans cela la divergence est garantie, planificateur ou pas.
+    # Start ON the lateral limit cycle (see centroidal_mpc.limit_cycle_state).
+    # Without this, divergence is guaranteed, planner or no planner.
     x, t = sched.limit_cycle_state(MASS, ZC)
     duration = duration + t
     f = np.zeros((sched.n_contacts, 3))
@@ -54,9 +54,9 @@ def run(horizon=12, dt_mpc=0.04, dt_sim=0.002, duration=6.0,
     act_prev = sched.contact_active(0.0)
     for _ in range(n):
         act_now = sched.contact_active(t)
-        # re-resolution FORCEE au changement d'ensemble de contacts : sans cela le
-        # bloqueur d'ordre zero maintient pendant jusqu'a dt_mpc des forces
-        # calculees pour un pied qui vient de decoller (CoP hors polygone).
+        # FORCED re-solve on a contact-set change: without it the zero-order
+        # hold keeps applying, for up to dt_mpc, forces computed for a foot
+        # that has just lifted off (CoP outside the support polygon).
         switched = not np.array_equal(act_now, act_prev)
         if t >= next_mpc - 1e-12 or switched:
             out = mpc.solve(x, t)
@@ -136,7 +136,7 @@ def main():
         return
 
     print("=" * 78)
-    print("MPC CENTROIDAL — boucle fermee sur la dynamique NON LINEAIRE exacte")
+    print("CENTROIDAL MPC - closed loop on the exact NONLINEAR dynamics")
     print("  horizon N=%d, dt_mpc=%.0f ms (%.1f s d'anticipation), duree %.1f s%s"
           % (a.horizon, a.dt * 1e3, a.horizon * a.dt, a.dur,
              "" if not a.push else "  | impulsion %.0f N laterale a t=3 s" % a.push))
@@ -146,10 +146,10 @@ def main():
     print("-" * 78)
     print("  progression      : %.3f m en %.2f s" % (r["dist"], r["t_end"]))
     print("  suivi CoM (xy)   : RMSE %.1f mm | max %.1f mm" % (r["rmse_mm"], r["max_err_mm"]))
-    print("  hauteur CoM      : deviation max %.1f mm  (le LIPM l'imposerait a 0)"
+    print("  CoM height       : max deviation %.1f mm  (the LIPM would force it to 0)"
           % r["z_dev_mm"])
-    print("  moment cinetique : |k|_max %.2f kg.m2/s  (le LIPM l'ignore)" % r["k_max"])
-    print("  CoP dans l'appui : %.1f %% des pas de temps" % (100 * r["cop_ok"]))
+    print("  angular momentum : |k|_max %.2f kg.m2/s  (the LIPM ignores it)" % r["k_max"])
+    print("  CoP within support: %.1f %% of timesteps" % (100 * r["cop_ok"]))
     print("  cone de friction : %.1f %% | fz_min %.2f N (contrainte >= 0)"
           % (100 * r["fric_ok"], r["fz_min"]))
     print("=" * 78)

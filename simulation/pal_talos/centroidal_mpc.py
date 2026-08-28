@@ -1,107 +1,107 @@
 """
-centroidal_mpc.py — Couche de planification MPC CENTROIDALE CONVEXE (S2bis).
+centroidal_mpc.py — CONVEX CENTROIDAL MPC planning layer (S2bis).
 
-Ecrit le 2026-08-11. Repond litteralement a la couche annoncee dans la question
-de recherche (Ch1 l.168) et specifiee en Ch3 §3.3, jamais implementee jusqu'ici.
+Written 2026-08-11. Answers literally the layer announced in the research
+question (Ch1 l.168) and specified in Ch3 §3.3, never implemented until now.
 
-DEPENDANCES : numpy + proxsuite UNIQUEMENT. Aucun import de MuJoCo, aucun import
-des fichiers S2/S3/S4 geles -> ce module ne peut pas regresser les campagnes
-existantes. Il est validable et valide HORS LIGNE (test_centroidal_mpc.py).
+DEPENDENCIES: numpy + proxsuite ONLY. No MuJoCo import, no import of the frozen
+S2/S3/S4 files -> this module cannot regress the existing campaigns. It is
+validatable and validated OFFLINE (test_centroidal_mpc.py).
 
 ===========================================================================
-1. MODELE
+1. MODEL
 ===========================================================================
-Dynamique centroidale EXACTE (Orin et al. 2013), etat
+EXACT centroidal dynamics (Orin et al. 2013), state
     x = [ c (3) ; l (3) ; k (3) ]
-avec c la position du CoM, l = m*c_dot le moment lineaire, k le moment
-cinetique centroidal (autour du CoM) :
+with c the CoM position, l = m*c_dot the linear momentum, k the centroidal
+angular momentum (about the CoM):
 
     c_dot = l / m
     l_dot = sum_i f_i + m*g
-    k_dot = sum_i (p_i - c) x f_i                       <-- BILINEAIRE en (c, f)
+    k_dot = sum_i (p_i - c) x f_i                       <-- BILINEAR in (c, f)
 
-Le seul terme non convexe est le bras de levier (p_i - c). On le linearise
-autour d'une trajectoire de reference c_hat(t) connue a l'avance
-(Di Carlo et al. 2018, « Dynamic Locomotion in the MIT Cheetah 3 via Convex
-Model-Predictive Control ») :
+The only non-convex term is the lever arm (p_i - c). It is linearised about a
+reference trajectory c_hat(t) known in advance
+(Di Carlo et al. 2018, "Dynamic Locomotion in the MIT Cheetah 3 via Convex
+Model-Predictive Control"):
 
     k_dot ~ sum_i (p_i - c_hat_k) x f_i
 
-Le probleme devient un QP CONVEXE en les forces de contact. C'est la
-difference de fond avec le LIPM : ni hauteur de CoM constante, ni moment
-cinetique nul. Les deux hypotheses du LIPM sont levees.
+The problem becomes a CONVEX QP in the contact forces. That is the fundamental
+difference with the LIPM: neither constant CoM height nor zero angular
+momentum. Both LIPM assumptions are lifted.
 
 ===========================================================================
-2. DISCRETISATION (exacte, pas d'approximation supplementaire)
+2. DISCRETISATION (exact, no further approximation)
 ===========================================================================
-A est nilpotente (A^2 = 0) car seule la ligne c depend de l. Donc
+A is nilpotent (A^2 = 0) since only the c row depends on l. Hence
     A_d = I + A*dt                       exact
     B_d = B*dt + A*B*dt^2/2              exact
     g_d = [ g*dt^2/2 ; m*g*dt ; 0 ]      exact
 
 ===========================================================================
-3. QP CONDENSE
+3. CONDENSED QP
 ===========================================================================
-Variables : U = [u_0 ... u_{N-1}], u_k = forces empilees aux N_c points.
+Variables: U = [u_0 ... u_{N-1}], u_k = forces stacked at the N_c points.
     min  sum_k ||x_k - x_k^ref||^2_Q + ||u_k||^2_R   (+ terminal Q_N)
-    s.c. 0 <= f_z,i <= f_max * s_ik        (s_ik = ordonnancement des contacts)
-         |f_x,i| <= mu * f_z,i , |f_y,i| <= mu * f_z,i    (pyramide, 4 facettes)
+    s.t. 0 <= f_z,i <= f_max * s_ik        (s_ik = contact schedule)
+         |f_x,i| <= mu * f_z,i , |f_y,i| <= mu * f_z,i    (pyramid, 4 facets)
 
-L'unilateralite par COIN de pied contraint implicitement le CoP au polygone
-d'appui : c'est la meme construction que l'executeur QP-WBC, donc les deux
-couches partagent le meme modele de contact (« inter-layer compatibility »
-revendiquee en Ch3 §3.4).
+Unilaterality per foot CORNER implicitly constrains the CoP to the support
+polygon: this is the same construction as the QP-WBC executor, so the two
+layers share the same contact model ("inter-layer compatibility" claimed in
+Ch3 §3.4).
 
 ===========================================================================
-4. SORTIES POUR L'EXECUTEUR QP-WBC
+4. OUTPUTS FOR THE QP-WBC EXECUTOR
 ===========================================================================
-    c_ref, cdot_ref, cddot_ref  -> tache CoM
+    c_ref, cdot_ref, cddot_ref  -> CoM task
     f_ref                       -> regularisation mu_f*||f - f_ref||^2
-                                   (Ch3 eq:qp-cost ECRIT f_ref ; le code actuel
-                                   implemente f_ref = 0. Le MPC le fournit.)
-    k_ref                       -> tache de moment cinetique (non presente dans
-                                   l'executeur actuel ; expose pour Ch6)
+                                   (Ch3 eq:qp-cost WRITES f_ref; the current
+                                   code implements f_ref = 0. The MPC supplies it.)
+    k_ref                       -> angular momentum task (not present in the
+                                   current executor; exposed for Ch6)
 
 ===========================================================================
-5. STATUT DU SOLVEUR
+5. SOLVER STATUS
 ===========================================================================
-Lecon de l'audit du 2026-08-11 : ProxQP NE LEVE PAS sur infaisabilite, il
-retourne son dernier itere. Ici le statut est lu A CHAQUE appel et un solve
-non converge est signale, compte, et remplace par la solution precedente
-(strategie de repli explicite, jamais silencieuse).
+Lesson from the 2026-08-11 audit: ProxQP DOES NOT RAISE on infeasibility, it
+returns its last iterate. Here the status is read AT EVERY call and a
+non-converged solve is reported, counted, and replaced by the previous solution
+(explicit fallback strategy, never silent).
 
 ===========================================================================
-6. RESULTAT DE VALIDATION ET LIMITE STRUCTURELLE  (2026-08-11)
+6. VALIDATION RESULT AND STRUCTURAL LIMIT  (2026-08-11)
 ===========================================================================
-Valide hors ligne sur la dynamique centroidale NON LINEAIRE exacte
-(test_centroidal_mpc.py). Ce qui MARCHE :
-  * equilibre statique : gravite compensee EXACTEMENT (932.0 N pour 95 kg),
-    derive du CoM nulle a 1e-4 m pres sur 3 s ;
-  * marche sur ~4 s (env. 7 pas) : RMSE CoM 45-53 mm, deviation de HAUTEUR
-    2.5-4.3 mm (le LIPM l'imposerait a 0 par hypothese), moment cinetique
-    borne a 6.5-6.8 kg.m2/s (le LIPM l'ignore) ;
-  * cone de friction et unilateralite satisfaits a 100 % par construction ;
-  * temps de resolution N=10, dt=50 ms : mean 4.9 ms, p99 7.9 ms
-    -> tient la cible fixee dans la these (« MPC lineaire < 10 ms »).
+Validated offline against the exact NONLINEAR centroidal dynamics
+(test_centroidal_mpc.py). What WORKS:
+  * static equilibrium: gravity compensated EXACTLY (932.0 N for 95 kg),
+    CoM drift zero to within 1e-4 m over 3 s;
+  * walking over ~4 s (about 7 steps): CoM RMSE 45-53 mm, HEIGHT deviation
+    2.5-4.3 mm (the LIPM would force it to 0 by assumption), angular momentum
+    bounded at 6.5-6.8 kg.m2/s (the LIPM ignores it);
+  * friction cone and unilaterality satisfied 100 % by construction;
+  * solve time N=10, dt=50 ms: mean 4.9 ms, p99 7.9 ms
+    -> meets the target set in the thesis ("linear MPC < 10 ms").
 
-Ce qui NE MARCHE PAS, et pourquoi ce n'est pas un bug :
-  * au-dela de ~4-6 s la trajectoire diverge (RMSE 2.9 m a 8 s) ;
-  * tolerance a une impulsion laterale : 50 N absorbee (RMSE 65 mm),
-    100 N marginale (237 mm), 150 N divergente.
+What DOES NOT WORK, and why it is not a bug:
+  * beyond ~4-6 s the trajectory diverges (RMSE 2.9 m at 8 s);
+  * tolerance to a lateral impulse: 50 N absorbed (RMSE 65 mm),
+    100 N marginal (237 mm), 150 N divergent.
 
-CAUSE. Les pas sont FIXES par le plan : la seule autorite de rejet est le
-deplacement du CoP a l'interieur de l'empreinte (~0.20 x 0.12 m). La dynamique
-laterale etant un pendule inverse (omega ~ 3.4 rad/s, constante de temps
-0.3 s), toute erreur residuelle croit exponentiellement, le CoP sature, et la
-divergence suit. C'est un resultat CONNU : c'est exactement pourquoi Herdt et
-al. (2010) font du LIEU DE PAS une variable de decision, et pourquoi le
-marcheur S2 de cette these adapte la DUREE de pas (Khadiv et al.).
+CAUSE. The footsteps are FIXED by the plan: the only rejection authority is
+moving the CoP inside the footprint (~0.20 x 0.12 m). Since the lateral
+dynamics is an inverted pendulum (omega ~ 3.4 rad/s, time constant 0.3 s), any
+residual error grows exponentially, the CoP saturates, and divergence follows.
+This is a KNOWN result: it is exactly why Herdt et al. (2010) make the FOOTSTEP
+LOCATION a decision variable, and why the S2 walker of this thesis adapts the
+step DURATION (Khadiv et al.).
 
-Autrement dit, cette implementation etablit quantitativement que la couche MPC
-centroidale, SEULE, ne suffit pas : il lui faut une adaptation de pas. Le
-levier evenementiel de S2 n'est donc pas un artifice, c'est le minimum
-d'adaptativite requis. TOUTE conclusion de marche exige d'abord d'ajouter
-l'adaptation du lieu de pas, puis l'integration MuJoCo.
+In other words, this implementation establishes quantitatively that the
+centroidal MPC layer ALONE is not enough: it needs step adaptation. The
+event-based lever of S2 is therefore not a trick, it is the minimum adaptivity
+required. ANY walking conclusion requires first adding footstep-location
+adaptation, then the MuJoCo integration.
 """
 import time
 import numpy as np
@@ -116,20 +116,20 @@ G = np.array([0.0, 0.0, -9.81])
 
 
 # ---------------------------------------------------------------------------
-#  Outils
+#  Utilities
 # ---------------------------------------------------------------------------
 def skew(r):
-    """S(r) tel que S(r) @ f = r x f."""
+    """S(r) such that S(r) @ f = r x f."""
     return np.array([[0.0, -r[2], r[1]],
                      [r[2], 0.0, -r[0]],
                      [-r[1], r[0], 0.0]])
 
 
 class GaitSchedule:
-    """Plan de pas + ordonnancement des contacts, aligne sur la convention S2.
+    """Footstep plan + contact schedule, aligned on the S2 convention.
 
-    Geometrie de pied identique a talos_wbc.CORNERS_MEASURED : 4 coins par pied.
-    Sequence : DS initial, puis alternance (DS bref, SS) comme le marcheur DCM.
+    Foot geometry identical to talos_wbc.CORNERS_MEASURED: 4 corners per foot.
+    Sequence: initial DS, then alternation (brief DS, SS) like the DCM walker.
     """
 
     def __init__(self, step_len=0.08, t_step=0.50, ds_ratio=0.12, ly=0.085,
@@ -139,24 +139,24 @@ class GaitSchedule:
         self.ly, self.n_steps, self.t_settle = ly, n_steps, t_settle
         self.corners = [(sx, sy) for sx in corners_x for sy in corners_y]
         self.n_pts_per_foot = len(self.corners)
-        self.n_contacts = 2 * self.n_pts_per_foot          # 8 points au total
+        self.n_contacts = 2 * self.n_pts_per_foot          # 8 points in total
 
     def foot_centres(self, t):
-        """Centres (x, y) des deux pieds a l'instant t. Indice 0 = gauche."""
+        """Centres (x, y) of both feet at time t. Index 0 = left."""
         if t < self.t_settle:
             return np.array([0.0, +self.ly]), np.array([0.0, -self.ly])
         tau = t - self.t_settle
-        k = int(tau / self.t_step)                          # numero de pas
+        k = int(tau / self.t_step)                          # step number
         k = min(k, self.n_steps - 1)
-        # le pied droit demarre ; a chaque pas, le pied de balancement avance de 2*step_len
-        n_r = (k + 1) // 2                                  # nb de poses du pied droit
+        # the right foot starts; at each step the swing foot advances by 2*step_len
+        n_r = (k + 1) // 2                                  # number of right-foot placements
         n_l = k // 2
         xr = n_r * 2 * self.step_len
         xl = n_l * 2 * self.step_len
         return np.array([xl, +self.ly]), np.array([xr, -self.ly])
 
     def contact_points(self, t):
-        """Positions monde des N_c points de contact (N_c x 3)."""
+        """World positions of the N_c contact points (N_c x 3)."""
         cl, cr = self.foot_centres(t)
         pts = []
         for centre in (cl, cr):
@@ -165,17 +165,17 @@ class GaitSchedule:
         return np.asarray(pts)
 
     def contact_active(self, t):
-        """Vecteur booleen (N_c,) : 1 si le point porte a l'instant t."""
+        """Boolean vector (N_c,): 1 if the point bears load at time t."""
         n = self.n_pts_per_foot
         s = np.ones(self.n_contacts)
         if t < self.t_settle:
-            return s                                        # double appui initial
+            return s                                        # initial double support
         tau = t - self.t_settle
         k = int(tau / self.t_step)
         phase = (tau - k * self.t_step) / self.t_step
         if phase < self.ds_ratio:
-            return s                                        # double appui de transfert
-        # appui simple : le pied qui avance est en l'air
+            return s                                        # transfer double support
+        # single support: the advancing foot is in the air
         swing_is_right = (k % 2 == 0)
         if swing_is_right:
             s[n:] = 0.0
@@ -184,37 +184,38 @@ class GaitSchedule:
         return s
 
     def limit_cycle_state(self, mass, zc, t_start=None, lat_gain=0.75):
-        """Etat initial SUR le cycle limite lateral periodique.
+        """Initial state ON the periodic lateral limit cycle.
 
-        Un bipede a pas pre-planifies ne peut pas demarrer au repos : la
-        dynamique laterale est un pendule inverse, et tout ecart au cycle
-        periodique croit en e^{omega t} (omega ~ 3.4 rad/s, soit 0.3 s de
-        constante de temps). Sans cette initialisation, la divergence est
-        garantie quel que soit le planificateur.
+        A biped with pre-planned steps cannot start from rest: the lateral
+        dynamics is an inverted pendulum, and any departure from the periodic
+        cycle grows as e^{omega t} (omega ~ 3.4 rad/s, i.e. a 0.3 s time
+        constant). Without this initialisation, divergence is guaranteed
+        whatever the planner.
 
-        Derivation (LIPM lateral, appui alternant a +-ly, duree T) : en imposant
-        que l'etat apres un pas soit l'image miroir de l'etat initial, le
-        systeme se resout en forme fermee et donne
-            y(0) = 0           (le CoM est sur l'axe median)
+        Derivation (lateral LIPM, support alternating at +-ly, duration T): by
+        requiring the state after one step to be the mirror image of the initial
+        state, the system solves in closed form and gives
+            y(0) = 0           (the CoM is on the median axis)
             ydot(0) = p_y * omega * tanh(omega*T/2)
-        ou p_y est le pied d'appui. C'est le meme resultat que la valeur de
-        commutation xi_s = ly*tanh(omega*T/2) utilisee par le marcheur DCM
-        (talos_dcm_walk_timing.py l.87), obtenue ici independamment.
+        where p_y is the stance foot. This is the same result as the switching
+        value xi_s = ly*tanh(omega*T/2) used by the DCM walker
+        (talos_dcm_walk_timing.py l.87), obtained here independently.
 
-        CALIBRATION `lat_gain` (mesuree par tir, 2026-08-11). La formule ci-dessus
-        suppose une alternance d'appuis SIMPLES purs. Le plan reel comporte 12 %
-        de double appui, pendant lequel le pendule lateral n'est pas celui du
-        modele -> la formule SURESTIME vy. Balayage sur 4 s :
+        CALIBRATION of `lat_gain` (measured by sweep, 2026-08-11). The formula
+        above assumes an alternation of pure SINGLE supports. The real plan
+        contains 12 % double support, during which the lateral pendulum is not
+        the one in the model -> the formula OVERESTIMATES vy. Sweep over 4 s:
 
             mult   0.70   0.75   0.80   0.85   0.90   1.00   1.20
             RMSE   45.1   46.8   52.7   63.2   82.7  240.6 1634.3  mm
 
-        Optimum plat sur [0.70, 0.80], divergence brutale au-dela : signature
-        d'une variete instable. Defaut retenu 0.75, au centre du plateau.
+        Flat optimum over [0.70, 0.80], abrupt divergence beyond: the signature
+        of an unstable manifold. Default kept at 0.75, at the centre of the
+        plateau.
         """
         omega = np.sqrt(9.81 / zc)
         t0 = self.t_settle if t_start is None else t_start
-        # premier appui simple : le pied droit balance (k=0) -> appui GAUCHE, p_y = +ly
+        # first single support: the right foot swings (k=0) -> LEFT stance, p_y = +ly
         p_y = +self.ly
         vy = lat_gain * p_y * omega * np.tanh(omega * self.t_step / 2.0)
         c_ref, v_ref = self.com_reference(t0, zc)
@@ -223,7 +224,7 @@ class GaitSchedule:
         return np.r_[c, mass * v, np.zeros(3)], t0
 
     def _support_centre(self, t):
-        """Centre du polygone d'appui instantane (creneau : discontinu en DS->SS)."""
+        """Centre of the instantaneous support polygon (a square wave: discontinuous at DS->SS)."""
         cl, cr = self.foot_centres(t)
         act = self.contact_active(t)
         n = self.n_pts_per_foot
@@ -232,14 +233,14 @@ class GaitSchedule:
         return cl.copy() if act[:n].any() else cr.copy()
 
     def com_reference(self, t, zc, n_smooth=9):
-        """Reference CoM = plan d'appui LISSE sur une periode de pas.
+        """CoM reference = the support plan SMOOTHED over one step period.
 
-        Le centre d'appui instantane est un creneau : le CoM d'un bipede ne peut
-        pas le suivre, et le prendre pour reference penalise le MPC pour une
-        erreur qu'il a raison de commettre. On moyenne donc sur +-T_step/2, ce
-        qui est l'equivalent discret du filtrage passe-bas reliant plan de ZMP
-        et trajectoire de CoM. Aucune hypothese LIPM n'est introduite ici : le
-        lissage porte sur la REFERENCE, pas sur le modele.
+        The instantaneous support centre is a square wave: a biped's CoM cannot
+        follow it, and taking it as the reference penalises the MPC for an error
+        it is right to make. It is therefore averaged over +-T_step/2, which is
+        the discrete equivalent of the low-pass filtering that relates the ZMP
+        plan to the CoM trajectory. No LIPM assumption is introduced here: the
+        smoothing applies to the REFERENCE, not to the model.
         """
         half = 0.5 * self.t_step
         ts = np.linspace(t - half, t + half, n_smooth)
@@ -252,7 +253,7 @@ class GaitSchedule:
 #  MPC
 # ---------------------------------------------------------------------------
 class CentroidalMPC:
-    """MPC centroidal convexe a horizon fuyant sur les forces de contact."""
+    """Convex receding-horizon centroidal MPC over the contact forces."""
 
     def __init__(self, mass, schedule, horizon=12, dt=0.04, mu=0.7,
                  fz_max=1500.0, zc=0.86,
@@ -295,13 +296,13 @@ class CentroidalMPC:
 
     # ---------------- construction et resolution ----------------
     def solve(self, x0, t0):
-        """Resout le MPC a l'instant t0 depuis l'etat x0 = [c, l, k].
+        """Solve the MPC at time t0 from the state x0 = [c, l, k].
 
         Retourne un dict : f_ref (nc x 3), c_ref, cdot_ref, cddot_ref, k_ref,
         status, solve_ms.
         """
         N, nu, nx, dt = self.N, self.nu, self.nx, self.dt
-        # --- references et linearisation le long de l'horizon ---
+        # --- references and linearisation along the horizon ---
         ts = [t0 + (k + 1) * dt for k in range(N)]
         xref = np.zeros((N, nx))
         pts_k, act_k, chat_k = [], [], []
@@ -343,7 +344,7 @@ class CentroidalMPC:
             H[k*nu:(k+1)*nu, k*nu:(k+1)*nu] += 2.0 * self.R
         H = 0.5 * (H + H.T) + 1e-9 * np.eye(N * nu)
 
-        # --- inegalites : 1 ligne fz (bornee) + 4 lignes de friction par point ---
+        # --- inequalities: 1 fz row (bounded) + 4 friction rows per point ---
         rows, lo, up = [], [], []
         for k in range(N):
             for i in range(self.nc):

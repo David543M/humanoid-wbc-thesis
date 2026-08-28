@@ -1,45 +1,45 @@
 """
-TALOS — S3 : MONTEE D'ESCALIER (3 marches) par approche LIPM PAR PLATEAUX.
+TALOS — S3: STAIR CLIMBING (3 steps) via a PLATEAU-BASED LIPM approach.
 
-Voir s3_design.md. Le marcheur S2 evenementiel (talos_dcm_walk_timing.DCMWalkT)
-suppose un sol plat : hauteur de pied `self.fz` scalaire et hauteur de CoM
-`self.zc` figee (omega=sqrt(g/zc) calcule une seule fois). Ce fichier leve
-l'hypothese plane SANS toucher au noyau (talos_wbc, talos_dcm_walk,
-talos_dcm_walk_timing INCHANGES) via une sous-classe :
+See s3_design.md. The event-driven S2 walker (talos_dcm_walk_timing.DCMWalkT)
+assumes flat ground: scalar foot height `self.fz` and CoM height `self.zc`
+frozen (omega=sqrt(g/zc) computed once). This file lifts the flat-ground
+assumption WITHOUT touching the core (talos_wbc, talos_dcm_walk,
+talos_dcm_walk_timing UNCHANGED) via a subclass:
 
-  1. `self.fz` devient une PROPRIETE renvoyant la hauteur de la marche CIBLE du
-     pied de balancement (stair_height(x_cible)). Toute la logique de swing, de
-     garde au sol et de detection de poser de DCMWalkT.update() l'utilise telle
-     quelle -> cloche de swing et poser corrects sur chaque marche, sans
-     reimplementer update().
-  2. `self.zc` (reference verticale de CoM, lue dans DCMWalk.control() ligne 219)
-     est ELEVEE en rampe vers la hauteur de la marche D'APPUI -> le CoM gagne
-     reellement de l'altitude au lieu de s'accroupir. omega reste fixe (plateau
-     quasi-statique, cf. s3_design.md par.3 ; omega_k = raffinement future work).
-  3. Metrique NOUVELLE `foot clearance` : gap minimal semelle<->surface sous le
-     pied pendant le vol (negatif = collision avec le nez de marche).
+  1. `self.fz` becomes a PROPERTY returning the height of the TARGET step of
+     the swing foot (stair_height(x_target)). All the swing, ground clearance
+     and touchdown detection logic in DCMWalkT.update() uses it as-is
+     -> correct swing arc and touchdown on every step, without
+     reimplementing update().
+  2. `self.zc` (vertical CoM reference, read in DCMWalk.control() line 219)
+     is RAMPED UP toward the height of the STANCE step -> the CoM actually
+     gains altitude instead of crouching. omega stays fixed (quasi-static
+     plateau, cf. s3_design.md par.3; omega_k = future-work refinement).
+  3. NEW metric `foot clearance`: minimum gap sole<->surface under the
+     foot during flight (negative = collision with the step nosing).
 
-Le plan de pas DCM reste 2D (xy) : l'escalier n'ajoute que la composante z.
+The DCM footstep plan stays 2D (xy): the stairs only add the z component.
 
-Profil d'escalier = doit rester synchronise avec scene_stairs.xml.
+Stair profile = must stay in sync with scene_stairs.xml.
 
-Usage (depuis pal_talos/, conda base avec mujoco) :
-    python talos_s3_stairs.py                    # bring-up deterministe
-    python talos_s3_stairs.py --viewer           # viewer MuJoCo (relance si chute)
+Usage (from pal_talos/, conda base with mujoco):
+    python talos_s3_stairs.py                    # deterministic bring-up
+    python talos_s3_stairs.py --viewer           # MuJoCo viewer (restarts on fall)
     python talos_s3_stairs.py --seed 0 --save s3_run.npz
-    python talos_s3_stairs.py --hriser 0.05      # balayage de conception
+    python talos_s3_stairs.py --hriser 0.05      # design sweep
 """
 import argparse, time, numpy as np, mujoco
 import talos_wbc as W
 import talos_dcm_walk as B
 import talos_dcm_walk_timing as T
 
-# --- profil d'escalier : (front_x, top_z) ---
-# Le profil de REFERENCE (make_stair_height) et la SCENE physique
-# (build_stairs_xml) sont derives des MEMES parametres (x0, tread, h_riser, n),
-# ce qui garantit leur coherence quel que soit le balayage.
-EPS = 1e-6              # tolerance de bord (evite les artefacts flottants aux nez de marche)
-PLATFORM = 0.40        # profondeur du palier d'arrivee (m)
+# --- stair profile: (front_x, top_z) ---
+# The REFERENCE profile (make_stair_height) and the physical SCENE
+# (build_stairs_xml) are derived from the SAME parameters (x0, tread, h_riser, n),
+# which guarantees their consistency regardless of the sweep.
+EPS = 1e-6              # edge tolerance (avoids floating-point artifacts at step noses)
+PLATFORM = 0.40        # depth of the landing platform (m)
 
 
 def make_risers(x0=0.30, tread=0.28, h=0.10, n=3):
@@ -56,15 +56,15 @@ def make_stair_height(risers, top_x):
         for xe, z in risers:
             if x >= xe - EPS:
                 h = z
-        # au-dela du palier d'arrivee, on retombe au sol (securite : le robot ne
-        # doit pas depasser top_x, sinon la marche disparait sous le pied)
+        # beyond the landing platform, drop back to ground level (safety: the robot
+        # must not exceed top_x, otherwise the step disappears from under the foot)
         return h if x <= top_x + EPS else 0.0
     return stair_height
 
 
 def build_stairs_xml(x0=0.30, tread=0.28, h=0.10, n=3):
-    """Genere la scene MuJoCo (n marches BOX) a partir des memes parametres que
-    le profil de reference -> physique et reference toujours synchrones."""
+    """Generates the MuJoCo scene (n BOX steps) from the same parameters as
+    the reference profile -> physics and reference always stay in sync."""
     end_x = top_x_of(x0, tread, n)
     steps = []
     for i in range(n):
@@ -100,28 +100,28 @@ def build_stairs_xml(x0=0.30, tread=0.28, h=0.10, n=3):
 
 
 class DCMWalkS3(T.DCMWalkT):
-    """Montee d'escalier par plateaux au-dessus du marcheur evenementiel S2."""
-    _stairs = None          # defaut classe : desactive (self.fz == sol plat) tant
-                            # que la config escalier n'est pas posee en fin d'__init__
+    """Stair climbing via plateaus, layered on top of the event-driven S2 walker."""
+    _stairs = None          # class default: disabled (self.fz == flat ground) until
+                            # the stair config is set at the end of __init__
 
     def __init__(self, m, d, stair_height, risers, tread, max_mount=0.32,
                  zc_rate=0.6, **kw):
-        super().__init__(m, d, **kw)        # DCMWalk.__init__ fait self.fz = p0[...]
-                                            #  -> passe par le setter -> _fz0
-        self._stairs = None                 # plat pendant la reconstruction du plan
-        self.zc0 = self.zc                  # hauteur de CoM au sol (reference)
-        # offset cheville->semelle (pour la metrique de clearance)
+        super().__init__(m, d, **kw)        # DCMWalk.__init__ does self.fz = p0[...]
+                                            #  -> goes through the setter -> _fz0
+        self._stairs = None                 # flat while rebuilding the plan
+        self.zc0 = self.zc                  # CoM height on the ground (reference)
+        # ankle->sole offset (for the clearance metric)
         self._ankle_off = float(d.xpos[self.left][2]) - self._fz0
-        self.ZC_RATE = zc_rate              # vitesse de rampe verticale du CoM (m/s)
-        # garde au sol ADAPTATIVE : plat = valeur S2 gelee (0.04, ne PAS casser le
-        # cycle limite valide) ; franchissement de contremarche = garde majoree.
-        # NB : self.fz = hauteur de la marche CIBLE releve deja toute la cloche au
-        # niveau superieur -> STEP_H n'a qu'a couvrir le retard PD au-dessus du nez,
-        # PAS la hauteur de contremarche (erreur du 1er jet : 0.14 global -> chute plat).
+        self.ZC_RATE = zc_rate              # vertical CoM ramp rate (m/s)
+        # ADAPTIVE ground clearance: flat = frozen S2 value (0.04, must NOT break the
+        # valid limit cycle); riser crossing = increased clearance.
+        # NB: self.fz = height of the TARGET step already lifts the entire swing arc to
+        # the upper level -> STEP_H only needs to cover the PD lag above the nose,
+        # NOT the riser height (1st-draft bug: 0.14 flat everywhere -> fall on flat ground).
         self.FLAT_CLEAR = 0.04
-        self.CROSS_CLEAR = 0.10             # surchargeable via --steph
-        self.COM_RATE = 0.9                 # vitesse de co-pilotage CoM en montee (m/s)
-        self.T_SWING_ARC = 0.45             # duree de l'arc up-over-down en appui simple (s)
+        self.CROSS_CLEAR = 0.10             # overridable via --steph
+        self.COM_RATE = 0.9                 # CoM co-drive rate while climbing (m/s)
+        self.T_SWING_ARC = 0.45             # duration of the up-over-down arc in single support (s)
         self._climb_k = -1; self._ss_t0 = None
         self._risers = risers; self._tread = tread; self._max_mount = max_mount
         self._k_prev = -1; self._pin_k = -1
@@ -129,16 +129,16 @@ class DCMWalkS3(T.DCMWalkT):
         self.log["clearance"] = []
         self._sw_clear = None; self._sw_active = False
         self._max_climb = 0.0               # plus haute marche d'appui atteinte
-        # STAIR-MODE : reconstruire le plan de pas (approche petits-pas + montee
-        # step-together = 1 pied monte sur le giron, l'autre le rejoint). Les
-        # appuis d'escalier sont FIGES par la geometrie (pas de replanification de
-        # derive comme sur le plat) -> voir re-pin dans update().
+        # STAIR-MODE: rebuild the footstep plan (small-step approach + step-together
+        # climb = one foot steps onto the tread, the other joins it). The
+        # stair footholds are PINNED by geometry (no drift replanning
+        # like on flat ground) -> see re-pin in update().
         self._build_stair_plan()
-        self._stairs = stair_height         # ACTIVE la logique escalier
+        self._stairs = stair_height         # ACTIVATES the stair logic
 
     def _rebuild_xi(self):
-        """Recursion arriere DCM : xi_ini a l'entree de chaque appui (identique a
-        DCMWalk.__init__, recalculee sur le plan d'escalier courant)."""
+        """DCM backward recursion: xi_ini at the start of each stance (identical to
+        DCMWalk.__init__, recomputed on the current stair plan)."""
         E = np.exp(self.omega * B.T_STEP)
         xi_ini = [None] * self.N
         xi_end = self.zmp[-1].copy()
@@ -148,33 +148,33 @@ class DCMWalkS3(T.DCMWalkT):
         self.xi_ini = xi_ini
 
     def _build_stair_plan(self):
-        """Plan de pas stair-mode : approche plate puis montee step-together.
-        Remplace le plan uniforme 0.08 m de la classe de base."""
+        """Stair-mode footstep plan: flat approach then step-together climb.
+        Replaces the base class's uniform 0.08 m plan."""
         d = self.d; ly = self.ly
         rx = float(d.xpos[self.right][0])
         risers = self._risers; tread = self._tread
         yof = lambda side: ly if side == self.left else -ly
         zmp = []; support = []
-        side = self.right                              # appui initial = pied droit
+        side = self.right                              # initial stance = right foot
         zmp.append(np.array([rx, yof(side)])); support.append(side)
         x_cur = rx
-        ctr0 = risers[0][0] + 0.5 * tread              # centre du giron 1 (cible cheville)
-        # anti-collision : la POINTE de la semelle (cheville + TOE_EXT) du dernier pied
-        # d'approche ne doit PAS depasser le nez de la 1ere contremarche, sinon le pied
-        # se pose dans la marche (bug « va trop loin »). On bride la cheville en consequence.
+        ctr0 = risers[0][0] + 0.5 * tread              # center of tread 1 (ankle target)
+        # anti-collision: the TOE of the sole (ankle + TOE_EXT) of the last approach
+        # foot must NOT go past the nose of the 1st riser, otherwise the foot
+        # lands inside the step (the "overshoots" bug). The ankle is clamped accordingly.
         TOE_EXT = 0.075; MARGIN = 0.03
-        x_app_max = risers[0][0] - TOE_EXT - MARGIN     # cheville max d'un pied d'approche
-        # APPROCHE : petits pas plats jusqu'a etre a portee de montee du giron 1
+        x_app_max = risers[0][0] - TOE_EXT - MARGIN     # max ankle x of an approach foot
+        # APPROACH: small flat steps until within climbing range of tread 1
         guard = 0
         while (ctr0 - x_cur) > self._max_mount and guard < 80:
             side = self.left if side == self.right else self.right
             x_cur = min(x_cur + B.STEP_LEN, x_app_max)
             zmp.append(np.array([x_cur, yof(side)])); support.append(side)
             guard += 1
-            if x_cur >= x_app_max - 1e-9:              # bord anti-collision atteint -> monter
+            if x_cur >= x_app_max - 1e-9:              # anti-collision edge reached -> climb
                 break
         self._n_approach = len(zmp)
-        # MONTEE step-together : mount (monte sur le giron) puis join (l'autre pied rejoint)
+        # CLIMB step-together: mount (step onto the tread) then join (the other foot follows)
         for t in range(len(risers)):
             ctr = risers[t][0] + 0.5 * tread
             side = self.left if side == self.right else self.right   # mount
@@ -182,15 +182,15 @@ class DCMWalkS3(T.DCMWalkT):
             side = self.left if side == self.right else self.right   # join
             zmp.append(np.array([ctr, yof(side)])); support.append(side)
         self.zmp = zmp; self.support = support; self.N = len(zmp)
-        self._plan0 = [p.copy() for p in zmp]          # plan fige (re-pin)
+        self._plan0 = [p.copy() for p in zmp]          # pinned plan (re-pin)
         self._rebuild_xi()
         last = self.zmp[-1]
         close_y = ly if self.support[-1] == self.right else -ly
         self.closing = np.array([last[0], close_y])
         self.end_target = 0.5 * (last + self.closing)
-        # journaliser le plan (footholds vises)
+        # log the plan (targeted footholds)
         sh = self._stairs_probe
-        print("[plan] %d footholds : approche %d petits-pas + montee %d (step-together)"
+        print("[plan] %d footholds: approach %d small-steps + climb %d (step-together)"
               % (self.N, self._n_approach, self.N - self._n_approach))
         for i, (p, s) in enumerate(zip(self.zmp, self.support)):
             tag = "app" if i < self._n_approach else "CLIMB"
@@ -198,36 +198,36 @@ class DCMWalkS3(T.DCMWalkT):
                   % (i, "G" if s == self.left else "D", p[0], p[1], sh(float(p[0])), tag))
 
     def _stairs_probe(self, x):
-        """Hauteur d'escalier au point x (independant de l'activation self._stairs)."""
+        """Stair height at point x (independent of self._stairs activation)."""
         h = 0.0
         for xe, z in self._risers:
             if x >= xe - EPS:
                 h = z
         return h
 
-    # ---- self.fz : hauteur de la marche CIBLE du pied de balancement ----
+    # ---- self.fz: height of the TARGET step of the swing foot ----
     @property
     def fz(self):
         if getattr(self, "_stairs", None) is None:
-            return self._fz0                # sol plat (avant activation / fallback)
+            return self._fz0                # flat ground (before activation / fallback)
         k = self.k
         gx = self.zmp[k + 1][0] if (k + 1 < self.N) else self.closing[0]
         return self._fz0 + self._stairs(float(gx))
 
     @fz.setter
     def fz(self, v):
-        self._fz0 = float(v)                # hauteur de reference du sol plat
+        self._fz0 = float(v)                # reference height of the flat ground
 
-    # ---- reference verticale de CoM : suit la marche d'APPUI en rampe ----
+    # ---- vertical CoM reference: ramps to follow the STANCE step ----
     def update(self, dt):
-        # garde au sol adaptative : fixee AVANT que le gait de base ne lise B.STEP_H.
-        # crossing = le pied de balancement change de niveau (fz_land > fz_takeoff).
-        # NB self.swing n'existe qu'apres le 1er super().update() -> garde hasattr
-        # (avant le 1er pas, pas de swing : STEP_H=0.04 par defaut, correct).
+        # adaptive ground clearance: set BEFORE the base gait reads B.STEP_H.
+        # crossing = the swing foot changes level (fz_land > fz_takeoff).
+        # NB self.swing only exists after the 1st super().update() -> hasattr guard
+        # (before the 1st step, no swing: STEP_H=0.04 default, correct).
         sw = getattr(self, "swing", None)
         if getattr(self, "_stairs", None) is not None and sw is not None:
             k = self.k
-            if k != self._k_prev:           # nouveau pas : memoriser la hauteur de decollage
+            if k != self._k_prev:           # new step: remember the takeoff height
                 self._fz_takeoff = float(self.d.xpos[sw][2]) - self._ankle_off
                 self._k_prev = k
             gx = self.zmp[k + 1][0] if (k + 1 < self.N) else self.closing[0]
@@ -235,12 +235,12 @@ class DCMWalkS3(T.DCMWalkT):
             crossing = (fz_land - self._fz_takeoff) > 1e-4
             B.STEP_H = self.CROSS_CLEAR if crossing else self.FLAT_CLEAR
 
-        super().update(dt)                  # gait S2 evenementiel inchange
+        super().update(dt)                  # unchanged event-driven S2 gait
         if getattr(self, "_stairs", None) is None:
             return
-        # RE-PIN : la base translate les appuis futurs de l'erreur de poser (derive
-        # plane). En escalier les appuis sont FIGES par la geometrie -> on restaure
-        # le plan fige pour les pas a venir (l'appui courant garde le poser reel).
+        # RE-PIN: the base class shifts future footholds by the touchdown error (flat-
+        # ground drift). On stairs the footholds are PINNED by geometry -> restore
+        # the pinned plan for upcoming steps (the current stance keeps its actual touchdown).
         if self.ended is None and self.k != self._pin_k:
             for j in range(self.k + 1, self.N):
                 self.zmp[j][:] = self._plan0[j]
@@ -251,35 +251,35 @@ class DCMWalkS3(T.DCMWalkT):
         self._max_climb = max(self._max_climb, step_h)
         z_tgt = self.zc0 + step_h
         self.zc += float(np.clip(z_tgt - self.zc, -self.ZC_RATE * dt, self.ZC_RATE * dt))
-        # STAIR-MODE (montee) : co-piloter le CoM en QUASI-STATIQUE. Le DCM plan seul
-        # laisse le CoM traîner (~270 mm) derriere les grands footholds -> la jambe ne
-        # peut pas atteindre la marche -> percute. On avance donc explicitement la
-        # reference CoM (xy) sur l'appui, en la menant vers le milieu appui->prochain
-        # foothold avec la phase du pas. Remplace la reference DCM sur les pas de montee.
+        # STAIR-MODE (climb): co-drive the CoM QUASI-STATICALLY. The DCM plan alone
+        # leaves the CoM trailing (~270 mm) behind the large footholds -> the leg
+        # cannot reach the step -> it hits it. So we explicitly advance the
+        # CoM (xy) reference over the stance, driving it toward the midpoint of stance->next
+        # foothold with the step phase. Replaces the DCM reference on climbing steps.
         self._climb_com_codrive(dt)
-        # STAIR-MODE : surcharger la trajectoire du pied sur les pas de MONTEE
-        # (remplace la cloche plate + le mode recovery lateral-pur, inadaptes).
+        # STAIR-MODE: override the foot trajectory on CLIMB steps
+        # (replaces the flat swing arc + the lateral-only recovery mode, both unsuitable).
         self._climb_swing_override()
         self._clearance_tick()
 
     def _climb_com_codrive(self, dt):
-        """Reference CoM quasi-statique pendant la montee : suit l'appui et avance
-        vers le milieu (appui, prochain foothold) selon la phase -> le corps monte
-        AVEC les pieds au lieu de traîner. Ralentir (--tstep) = plus quasi-statique."""
+        """Quasi-static CoM reference during the climb: follows the stance foot and moves
+        toward the midpoint of (stance, next foothold) according to the phase -> the body climbs
+        WITH the feet instead of trailing. Slowing down (--tstep) = more quasi-static."""
         if self.ended is not None:
             return
         k = self.k
-        # stair-mode actif des que la CIBLE du pas (zmp[k+1]) est un foothold
-        # d'escalier -> k+1 >= _n_approach (sinon le 1er mount reste au gait plat
-        # = overshoot + percute la marche : bug d'indice observe « va trop loin »).
+        # stair-mode active as soon as the step TARGET (zmp[k+1]) is a stair
+        # foothold -> k+1 >= _n_approach (otherwise the 1st mount stays on the flat gait
+        # = overshoot + hits the step: the observed "overshoots" indexing bug).
         if (k + 1) < self._n_approach or self.t0 is None:
             return
-        # QUASI-STATIQUE STRICT : la reference CoM SUIT LE PIED D'APPUI (x ET y).
-        # Le trace #7 a montre que viser le MILIEU appui->prochain foothold poussait
-        # le CoM DEVANT le seul pied au sol pendant l'appui simple (CoM 0.44 vs appui
-        # 0.19) -> bascule avant (pitch +65, DCM_x->1.8, chute). En restant au-dessus
-        # de l'appui, le CoM n'avance QUE lorsque ce pied (plus avance) devient l'appui
-        # a l'etape suivante -> montee en « CoM suit l'appui », sans se jeter en avant.
+        # STRICT QUASI-STATIC: the CoM reference FOLLOWS THE STANCE FOOT (x AND y).
+        # Trace #7 showed that targeting the MIDPOINT stance->next foothold pushed
+        # the CoM AHEAD of the single foot on the ground during single support (CoM 0.44 vs stance
+        # 0.19) -> forward tip-over (pitch +65, DCM_x->1.8, fall). By staying above
+        # the stance foot, the CoM only advances once that (more advanced) foot becomes the stance
+        # at the next step -> climbing with "CoM follows the stance", without pitching forward.
         st = np.asarray(self.d.xpos[self.stance][:2], dtype=float)
         tgt = np.array([float(st[0]), float(st[1])])
         rate = self.COM_RATE * dt
@@ -287,24 +287,24 @@ class DCMWalkS3(T.DCMWalkT):
         self.xi_ref = self.com_ref_xy.copy()
 
     def _climb_swing_override(self):
-        """Trajectoire de swing dediee au franchissement : leve d'abord (pic a
-        s~0.45, sans saut au depart), avance ensuite (retardee), descend au CENTRE
-        du giron fige. Phase indexee sur T_nom (PAS sur le timing adaptatif qui
-        ecourtait le pas -> pied court -> percute la contremarche). Bypasse aussi
-        le mode recovery de la base (lateral-pur = fatal en escalier)."""
+        """Dedicated swing trajectory for step crossing: lifts first (peak at
+        s~0.45, no jump at the start), advances next (delayed), descends onto the CENTER
+        of the pinned tread. Phase indexed on T_nom (NOT on the adaptive timing which
+        shortened the step -> short foot -> hits the riser). Also bypasses
+        the base class's recovery mode (lateral-only = fatal on stairs)."""
         if self.ended is not None:
             return
         k = self.k
-        # actif des que la CIBLE (zmp[k+1]) est un foothold d'escalier ; le 1er mount
-        # est le pas k=_n_approach-1 (bug d'indice corrige : « 3e pas va trop loin »).
+        # active as soon as the TARGET (zmp[k+1]) is a stair foothold; the 1st mount
+        # is step k=_n_approach-1 (indexing bug fixed: "3rd step overshoots").
         if (k + 1) < self._n_approach or (k + 1) >= self.N:
             return
-        # NB : le GATING (maintien du pied au sol en DS) a ete RETIRE (stair-mode #9) :
-        # le timing adaptatif du gait plat raccourcit le pas a T_MIN quand le DCM derive,
-        # terminant le pas PENDANT le maintien -> mount jamais execute (0/3). Incompatibilite
-        # architecturale documentee (Ch5 §5.6 / Ch6). Config conservee = « CoM suit l'appui ».
+        # NB: GATING (holding the foot on the ground during DS) was REMOVED (stair-mode #9):
+        # the flat gait's adaptive timing shortens the step to T_MIN when the DCM drifts,
+        # ending the step WHILE holding -> mount never executes (0/3). Architectural
+        # incompatibility documented (Ch5 §5.6 / Ch6). Config kept = "CoM follows the stance".
         if self.t0 is None or getattr(self, "phase", None) == "DS":
-            return                                       # double appui : gere par la base
+            return                                       # double support: handled by the base class
         frm = self.swing_from.get(self.swing) if hasattr(self.swing_from, "get") else None
         if frm is None:
             return
@@ -313,21 +313,21 @@ class DCMWalkS3(T.DCMWalkT):
         takeoff_z = float(frm[2])
         peak = max(takeoff_z, land_z) + self.CROSS_CLEAR
         s = min(max((self.t - self.t0) / self.T_nom, 0.0), 1.0)
-        # profil UP-OVER-DOWN : monter VERTICAL au-dessus du decollage (phase 1),
-        # avancer A HAUTEUR DE PIC (phase 2, la semelle est deja au-dessus du nez),
-        # descendre sur le giron cible (phase 3). Le mouvement horizontal ne se fait
-        # QU'A hauteur de pic -> la semelle ne frotte plus la contremarche (bug frottement).
-        # NB self.swing_pos est la cheville ; la semelle est ~_ankle plus bas, la garde
-        # CROSS_CLEAR (peak) couvre cet offset + le retard PD.
+        # UP-OVER-DOWN profile: rise VERTICALLY above the takeoff point (phase 1),
+        # advance AT PEAK HEIGHT (phase 2, the sole is already above the nose),
+        # descend onto the target tread (phase 3). Horizontal motion happens
+        # ONLY at peak height -> the sole no longer scrapes the riser (scraping bug).
+        # NB self.swing_pos is the ankle; the sole is ~_ankle lower, the CROSS_CLEAR
+        # clearance (peak) covers this offset + the PD lag.
         LIFT, FWD = 0.30, 0.72
-        if s < LIFT:                                     # 1) monter vertical
+        if s < LIFT:                                     # 1) rise vertically
             xfrac = 0.0
             z = takeoff_z + (peak - takeoff_z) * np.sin(np.pi / 2 * (s / LIFT))
-        elif s < FWD:                                    # 2) avancer a hauteur de pic
+        elif s < FWD:                                    # 2) advance at peak height
             u = (s - LIFT) / (FWD - LIFT)
-            xfrac = u * u * (3.0 - 2.0 * u)              # smootherstep horizontal
+            xfrac = u * u * (3.0 - 2.0 * u)              # horizontal smootherstep
             z = peak
-        else:                                            # 3) descendre sur le giron
+        else:                                            # 3) descend onto the tread
             xfrac = 1.0
             u = (s - FWD) / (1.0 - FWD)
             z = land_z + (peak - land_z) * np.cos(np.pi / 2 * u)
@@ -336,7 +336,7 @@ class DCMWalkS3(T.DCMWalkT):
         self.swing_pos = np.array([x, y, z])
 
     def _clearance_tick(self):
-        """Gap minimal semelle<->surface directement sous le pied pendant le vol."""
+        """Minimum gap sole<->surface directly under the foot during flight."""
         d = self.d
         if getattr(self, "phase", None) == "SS":
             sw = self.swing
@@ -351,14 +351,14 @@ class DCMWalkS3(T.DCMWalkT):
 
 
 def _base_pitch_deg(d):
-    """Tangage du bassin (deg) : + = penche vers l'AVANT (se jette en avant)."""
+    """Pelvis pitch (deg): + = leaning FORWARD (pitching forward)."""
     import math
     w, x, y, z = float(d.qpos[3]), float(d.qpos[4]), float(d.qpos[5]), float(d.qpos[6])
     return math.degrees(math.asin(max(-1.0, min(1.0, 2.0 * (w * y - z * x)))))
 
 
 def trace_row(m, d, c):
-    """Instantane detaille de l'etat (1 ligne de trace)."""
+    """Detailed state snapshot (1 trace row)."""
     com = d.subtree_com[c.base]
     try:
         xi = c._measured_dcm()[2]
@@ -402,18 +402,18 @@ def _trace_print(r):
 
 def main():
     ap = argparse.ArgumentParser()
-    # --- geometrie escalier (doit rester synchro avec scene_stairs.xml) ---
-    ap.add_argument("--x0", type=float, default=0.30, help="x du premier nez de marche (m)")
+    # --- stair geometry (must stay in sync with scene_stairs.xml) ---
+    ap.add_argument("--x0", type=float, default=0.30, help="x of the first step nosing (m)")
     ap.add_argument("--tread", type=float, default=0.28, help="giron (m)")
     ap.add_argument("--hriser", type=float, default=0.10, help="contremarche (m) — balayage {0.05,0.10,0.15}")
-    ap.add_argument("--zcrate", type=float, default=0.6, help="vitesse de rampe verticale du CoM (m/s)")
+    ap.add_argument("--zcrate", type=float, default=0.6, help="vertical CoM ramp speed (m/s)")
     ap.add_argument("--maxmount", type=float, default=0.28,
-                    help="pas de montee max autorise (m) : fin de l'approche quand le centre du giron 1 est a portee")
+                    help="maximum climbing step allowed (m): the approach ends when the centre of tread 1 is within reach")
     ap.add_argument("--sagmax", type=float, default=0.50,
-                    help="capture sagittale SAG_MAX (m) : elargie vs S2 (0.13) pour autoriser les grands pas de montee")
+                    help="sagittal capture SAG_MAX (m): widened against S2 (0.13) to allow large climbing steps")
     ap.add_argument("--comrate", type=float, default=0.6,
-                    help="vitesse de co-pilotage quasi-statique du CoM en montee (m/s) ; monter si le CoM traîne")
-    # --- gait : defauts = config S2 gelee ; tstep majore pour grands pas ---
+                    help="quasi-static CoM co-driving speed while climbing (m/s); raise it if the CoM lags")
+    # --- gait: defaults = frozen S2 config; tstep increased for large steps ---
     ap.add_argument("--steps", type=int, default=20)
     ap.add_argument("--steplen", type=float, default=0.08)
     ap.add_argument("--tstep", type=float, default=0.8)
@@ -430,9 +430,9 @@ def main():
     ap.add_argument("--wfoot", type=float, default=6000.0)
     ap.add_argument("--wfootst", type=float, default=500.0)
     ap.add_argument("--steph", type=float, default=0.14,
-                    help="garde au sol du pied de balancement sur le pas de FRANCHISSEMENT (m) ; "
-                         "le plat garde la valeur S2 gelee 0.04 (adaptatif par pas). "
-                         "NB self.fz releve deja la cloche au niveau superieur : steph ne couvre que le retard PD au-dessus du nez")
+                    help="swing-foot ground clearance on the CROSSING step (m); "
+                         "flat ground keeps the frozen S2 value 0.04 (adaptive per step). "
+                         "NB self.fz already raises the bell to the upper level: steph only covers the PD lag above the nosing")
     ap.add_argument("--no-timing", dest="timing", action="store_false")
     ap.add_argument("--no-feedback", dest="feedback", action="store_false")
     ap.add_argument("--no-footfb", dest="footfb", action="store_false")
@@ -440,10 +440,10 @@ def main():
     ap.add_argument("--no-footori", dest="footori", action="store_false")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--trace", action="store_true",
-                    help="LOG DETAILLE par tick -> s3_trace.csv + trace console compacte pendant la montee")
+                    help="DETAILED per-tick LOG -> s3_trace.csv + compact console trace during the climb")
     ap.add_argument("--tracefile", type=str, default="s3_trace.csv")
     ap.add_argument("--traceevery", type=int, default=40,
-                    help="periode (ticks) d'impression console de la trace pendant la montee")
+                    help="period (ticks) of console trace printing during the climb")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--video", action="store_true")
     ap.add_argument("--viewer", action="store_true")
@@ -454,22 +454,22 @@ def main():
     risers = make_risers(a.x0, a.tread, a.hriser)
     top_x = top_x_of(a.x0, a.tread, len(risers))
     stair_height = make_stair_height(risers, top_x)
-    top_target = risers[-1][1]              # hauteur du sommet (= n*h_riser)
-    # generer la scene physique depuis les MEMES parametres (coherence garantie)
+    top_target = risers[-1][1]              # top height (= n*h_riser)
+    # generate the physical scene from the SAME parameters (consistency guaranteed)
     with open("scene_stairs.xml", "w") as f:
         f.write(build_stairs_xml(a.x0, a.tread, a.hriser))
-    print("[scene] scene_stairs.xml genere : x0=%.2f tread=%.2f h=%.2f n=%d (top_x=%.2f)"
+    print("[scene] scene_stairs.xml generated: x0=%.2f tread=%.2f h=%.2f n=%d (top_x=%.2f)"
           % (a.x0, a.tread, a.hriser, len(risers), top_x))
 
-    # parametres de gait via les globals du module de base (convention etablie)
+    # gait parameters via the base module's globals (established convention)
     B.N_STEPS = a.steps; B.STEP_LEN = a.steplen; B.T_STEP = a.tstep; B.DS_OVL = a.dsovl
-    B.STEP_H = 0.04                          # garde plat = valeur S2 gelee ; adaptee par pas dans DCMWalkS3.update()
+    B.STEP_H = 0.04                          # flat clearance = frozen S2 value; adapted per step in DCMWalkS3.update()
     W.KP_FOOT, W.KD_FOOT = 650.0, 65.0
     B.KP_SW, B.KD_SW = 420.0, 42.0
     T.ZLAND_K, T.ZLAND_MIN = 15.0, 0.18
-    T.SAG_MAX = a.sagmax                     # capture sagittale elargie (grands pas de montee)
+    T.SAG_MAX = a.sagmax                     # widened sagittal capture (large climbing steps)
 
-    W.MODEL = "scene_stairs.xml"             # <-- escalier au lieu du sol plat
+    W.MODEL = "scene_stairs.xml"             # <-- stairs instead of flat ground
     m = mujoco.MjModel.from_xml_path(W.MODEL); d = mujoco.MjData(m)
     mujoco.mj_resetDataKeyframe(m, d, 0); mujoco.mj_forward(m, d)
     if a.seed is not None:
@@ -514,13 +514,13 @@ def main():
                 slp = (start + d.time) - time.time()
                 if slp > 0: time.sleep(slp)
                 if d.qpos[2] < 0.5:
-                    print("[viewer] chute t=%.2f s (pas k=%d) — relance" % (c.t, c.k))
+                    print("[viewer] fall t=%.2f s (step k=%d) — restarting" % (c.t, c.k))
                     time.sleep(0.6)
                     mujoco.mj_resetDataKeyframe(m, d, 0); mujoco.mj_forward(m, d)
                     c = build(d); start = time.time()
         return
 
-    t_cap = 6.0 + c.N * a.tmax + T.T_END     # duree basee sur la longueur du plan d'escalier
+    t_cap = 6.0 + c.N * a.tmax + T.T_END     # duration based on the length of the stair plan
     render = None
     if a.video:
         import talos_sim; render = talos_sim.render
@@ -536,7 +536,7 @@ def main():
         if d.qpos[2] < 0.6:
             fell_at = c.t
             if a.trace:
-                _trace_print(trace_row(m, d, c)); print("[trc] ===== CHUTE (base_z<0.6) =====")
+                _trace_print(trace_row(m, d, c)); print("[trc] ===== FALL (base_z<0.6) =====")
             break
         if c.ended is not None and (c.t - c.ended) > T.T_END:
             break
@@ -547,9 +547,9 @@ def main():
         with open(a.tracefile, "w", newline="") as f:
             wr = csv.DictWriter(f, fieldnames=list(trace_rows[0].keys()))
             wr.writeheader(); wr.writerows(trace_rows)
-        print("[ok] %s (%d lignes)" % (a.tracefile, len(trace_rows)))
+        print("[ok] %s (%d lines)" % (a.tracefile, len(trace_rows)))
 
-    # ---------- bilan S3 ----------
+    # ---------- S3 summary ----------
     com = d.subtree_com[c.base]
     dist = float(com[0] - x0m); climb = float(com[2] - z0m)
     upright = d.qpos[2] > 0.8 and fell_at is None
@@ -562,20 +562,20 @@ def main():
     lg = np.array(c.log["land_grf"]) if c.log["land_grf"] else np.array([np.nan])
     nq = int(getattr(c, "_qp_fail", 0)); ntick = max(len(cm), 1)
     print("=" * 68)
-    print("S3 STAIRS  steps=%d len=%.2f Tnom=%.2f [%.2f,%.2f] | escalier x0=%.2f tread=%.2f h=%.2f steph=%.2f seed=%s"
+    print("S3 STAIRS  steps=%d len=%.2f Tnom=%.2f [%.2f,%.2f] | stairs x0=%.2f tread=%.2f h=%.2f steph=%.2f seed=%s"
           % (a.steps, a.steplen, a.tstep, a.tmin, a.tmax, a.x0, a.tread, a.hriser, a.steph, a.seed))
     print("  outcome      : %s%s" % ("UPRIGHT" if upright else "FELL",
-          "" if fell_at is None else "  (t=%.2f s, pas k=%d)" % (fell_at, c.k)))
-    print("  montee       : %d/%d marches (max appui %.2f m) | gain CoM z %.3f m -> %s"
+          "" if fell_at is None else "  (t=%.2f s, step k=%d)" % (fell_at, c.k)))
+    print("  climb        : %d/%d steps (max stance %.2f m) | CoM z gain %.3f m -> %s"
           % (n_climbed, len(risers), c._max_climb, climb, "SUCCESS" if success else "FAIL"))
-    print("  avancee x    : %.2f m | pas poses=%d / %d" % (dist, len(ts), a.steps - 1))
-    print("  CLEARANCE    : min %.3f m | mean %.3f m | franchissements=%d%s"
+    print("  x progress   : %.2f m | steps taken=%d / %d" % (dist, len(ts), a.steps - 1))
+    print("  CLEARANCE    : min %.3f m | mean %.3f m | crossings=%d%s"
           % (np.nanmin(cl), np.nanmean(cl), len(c.log["clearance"]),
              "  ⚠ COLLISION" if (len(c.log["clearance"]) and np.nanmin(cl) < 0) else ""))
     print("  CoM err (xy) : RMSE %.1f mm | max %.1f mm"
           % (np.sqrt(np.nanmean(ce**2)) * 1e3, np.nanmax(ce) * 1e3))
     if len(c.log["land_grf"]):
-        print("  poser GRF    : pic %.0f N | mean %.0f N" % (np.nanmax(lg), np.nanmean(lg)))
+        print("  landing GRF  : peak %.0f N | mean %.0f N" % (np.nanmax(lg), np.nanmean(lg)))
     if len(cm):
         print("  ctrl loop    : mean %.2f ms | p99 %.2f ms | QP feas %.1f%%"
               % (cm.mean(), np.percentile(cm, 99), 100.0 * (1 - nq / ntick)))

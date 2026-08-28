@@ -1,273 +1,271 @@
-# S3 — Stair Climbing : Design Document (montée 3 marches)
+# S3 — Stair Climbing: design document (three-step ascent)
 
-*Kickoff : 2026-07-09 | Statut : conception (aucun code S3 encore écrit) | Portée : ascension seule*
-*Satellite de the thesis (S3), §9.2 (métriques), §13 (flow), §10 (définitions)*
-*Pipeline cible : `pal_talos/` (MuJoCo natif + ProxQP), sous-classe de `talos_dcm_walk_timing.py`*
+*Kickoff: 2026-07-09 | Status: design (no S3 code written yet) | Scope: ascent only*
+*Satellite of the thesis (S3), §9.2 (metrics), §13 (flow), §10 (definitions)*
+*Target pipeline: `pal_talos/` (native MuJoCo + ProxQP), a subclass of `talos_dcm_walk_timing.py`*
 
-> **But du document.** Spécifier — avant toute ligne de code — ce que le scénario S3
-> (montée de 3 marches, métriques *foot clearance* + *forces de contact*, the thesis)
-> exige au-delà du marcheur plat S2, statuer sur l'approche de planification, et fixer
-> le protocole de campagne. Ce document est la brique « problème → méthode » de S3 ;
-> il précède l'implémentation et le futur §5.6 (Ch5).
-
----
-
-## 1. Objectif et positionnement
-
-S3 étend la validation du framework WBC hiérarchique (centroidal planning + QP-WBC) au
-**franchissement d'obstacles verticaux discrets** : la montée de trois marches. Conformément
-au the thesis, la métrique principale est le couple *(foot clearance, forces de
-contact)*, avec report des métriques transverses (CoM tracking, task success, QP feasibility,
-temps de solve) déjà instrumentées pour S1/S2.
-
-Le positionnement dans la chaîne logique (§13) est direct : S1 valide l'équilibre statique,
-S2 la locomotion plane ; S3 teste la **robustesse du même exécuteur QP-WBC face à une rupture
-de l'hypothèse de terrain plat**. C'est la première fois dans la campagne que la géométrie du
-sol cesse d'être un demi-plan z = fz constant. S3 n'introduit **aucune** nouvelle tâche de
-manipulation (réservée à S4) ni perturbation stochastique (réservée à S5) : la seule variable
-ajoutée est l'altitude du contact.
-
-> **Insight critique.** La valeur de S3 pour la thèse n'est pas de « faire monter TALOS » — de
-> nombreux travaux l'ont fait (Caron-Kheddar-Tempier 2019 sur HRP-4) — mais de mesurer, sous
-> un protocole reproductible et borné en CI, **jusqu'où le pipeline S2 dégénère quand on lève
-> l'hypothèse LIPM plane**. Un échec quantifié (ex. clearance insuffisante, pic de GRF hors
-> borne) a autant de valeur probante qu'un succès, à condition d'être attribué à une cause
-> identifiée. C'est la ligne éditoriale déjà adoptée pour le résultat négatif S2 (Ch6).
+> **Purpose of this document.** Specify — before a single line of code — what the S3 scenario
+> (a three-step ascent, metrics *foot clearance* + *contact forces*) demands beyond the flat
+> S2 walker, settle the planning approach, and fix the campaign protocol. This document is the
+> "problem → method" component of S3; it precedes the implementation and the future §5.6 (Ch5).
 
 ---
 
-## 2. Le verrou technique : rupture de l'hypothèse LIPM à hauteur constante
+## 1. Objective and positioning
 
-Le planificateur actuel (`talos_dcm_walk.py`) repose sur le **Linear Inverted Pendulum Model**
-à hauteur de CoM constante. Trois lignes en fixent l'hypothèse (vérifiées au niveau du code) :
+S3 extends the validation of the hierarchical WBC framework (centroidal planning + QP-WBC) to
+**crossing discrete vertical obstacles**: climbing three steps. Following the thesis, the primary
+metric is the pair *(foot clearance, contact forces)*, with the transverse metrics reported
+alongside (CoM tracking, task success, QP feasibility, solve time) already instrumented for
+S1/S2.
+
+Its position in the logical chain (§13) is direct: S1 validates static balance, S2 flat
+locomotion; S3 tests the **robustness of the same QP-WBC executor against a break in the
+flat-terrain assumption**. It is the first time in the campaign that the ground geometry stops
+being a half-plane at constant z = fz. S3 introduces **no** new manipulation task (reserved for
+S4) and no stochastic perturbation (reserved for S5): the only added variable is the contact
+altitude.
+
+> **Critical insight.** The value of S3 for the thesis is not "making TALOS climb" — many works
+> have done that (Caron-Kheddar-Tempier 2019 on HRP-4) — but measuring, under a reproducible
+> protocol bounded by confidence intervals, **how far the S2 pipeline degrades once the planar
+> LIPM assumption is lifted**. A quantified failure (insufficient clearance, a GRF peak out of
+> bounds) carries as much evidential value as a success, provided it is attributed to an
+> identified cause. This is the editorial line already adopted for the negative S2 result (Ch6).
+
+---
+
+## 2. The technical obstacle: breaking the constant-height LIPM assumption
+
+The current planner (`talos_dcm_walk.py`) rests on the **Linear Inverted Pendulum Model** at
+constant CoM height. Three lines fix that assumption (verified at code level):
 
 ```python
-self.fz    = p0[self.left][2]          # hauteur des DEUX pieds = un seul scalaire (sol plat)
-self.zc    = subtree_com[base][2]      # hauteur de CoM figée à l'init
-self.omega = np.sqrt(9.81 / self.zc)   # pulsation LIPM constante, calculée UNE fois
+self.fz    = p0[self.left][2]          # height of BOTH feet = a single scalar (flat ground)
+self.zc    = subtree_com[base][2]      # CoM height frozen at init
+self.omega = np.sqrt(9.81 / self.zc)   # constant LIPM frequency, computed ONCE
 ```
 
-et la trajectoire de swing pose systématiquement le pied à cette même altitude :
+and the swing trajectory systematically places the foot at that same altitude:
 
 ```python
-swing_pos[2] = self.fz + STEP_H * np.sin(np.pi * s)   # cloche au-dessus d'un sol plat unique
-goal = np.array([zmp[k+1][0], zmp[k+1][1], self.fz])  # cible d'appui à fz constant
+swing_pos[2] = self.fz + STEP_H * np.sin(np.pi * s)   # bell above a single flat ground
+goal = np.array([zmp[k+1][0], zmp[k+1][1], self.fz])  # foothold target at constant fz
 ```
 
-Sur un escalier, cette hypothèse casse à trois niveaux :
+On a staircase this assumption breaks at three levels:
 
-1. **Altitude d'appui variable.** Chaque marche `k` a sa propre hauteur `fz_k = k · h_riser`.
-   Un scalaire `self.fz` ne peut plus décrire ni la cible d'appui, ni la détection de poser,
-   ni la garde au sol du pied de balancement.
-2. **Hauteur de CoM non constante.** Monter fait croître `z_c` d'environ `h_riser` par marche.
-   Or `omega = sqrt(g/z_c)` gouverne toute la récursion DCM. Le maintenir figé introduit une
-   erreur de modèle systématique qui s'aggrave à chaque marche. C'est le cœur du problème :
-   la dynamique du DCM plan (Englsberger 2015, forme 2D) n'est valable qu'à `z_c` constant.
-3. **Composante verticale de la dynamique.** Le LIPM plan suppose une force verticale égale au
-   poids (accélération verticale nulle du CoM). Une montée demande un travail vertical net
-   (`m·g·h_riser` par marche) que le modèle 2D ne représente pas — il apparaît comme une
-   perturbation non modélisée sur le canal sagittal.
+1. **Variable foothold altitude.** Each step `k` has its own height `fz_k = k · h_riser`. A
+   scalar `self.fz` can no longer describe the foothold target, the touchdown detection, or the
+   swing foot's ground clearance.
+2. **Non-constant CoM height.** Climbing raises `z_c` by roughly `h_riser` per step. But
+   `omega = sqrt(g/z_c)` governs the whole DCM recursion. Keeping it frozen introduces a
+   systematic model error that worsens with every step. This is the heart of the problem: the
+   planar DCM dynamics (Englsberger 2015, 2D form) is valid only at constant `z_c`.
+3. **Vertical component of the dynamics.** The planar LIPM assumes a vertical force equal to the
+   weight (zero vertical CoM acceleration). Climbing demands net vertical work (`m·g·h_riser` per
+   step) that the 2D model does not represent — it appears as an unmodelled perturbation on the
+   sagittal channel.
 
-Deux familles de réponses existent dans la littérature, qu'il faut distinguer :
+Two families of answer exist in the literature, and they must be distinguished:
 
-| Approche | Référence (vérifiée) | Idée | Coût d'intégration dans `pal_talos/` |
+| Approach | Reference (verified) | Idea | Cost of integration into `pal_talos/` |
 |----------|----------------------|------|--------------------------------------|
-| **3D-DCM (eCMP/VRP)** | Englsberger, Ott, Albu-Schäffer, *IEEE T-RO* 31(2):355-368, 2015 | Étend le DCM en 3D ; le *Virtual Repellent Point* encode direction **et** magnitude de la force totale → gère `z_c` variable | Élevé : réécriture de la récursion DCM (2D→3D), nouvelle référence verticale de CoM |
-| **VHIP capturability** | Caron, Escande, Lanari, Mallein, *IEEE T-RO*, 2019 (*Capturability-based Pattern Generation for Walking with Variable Height* ; démo escalier HRP-4) | Générateur de motifs sur pendule à hauteur variable, capturabilité sur terrain accidenté ; résolu assez vite pour MPC temps-réel | Très élevé : nouveau générateur de motifs, schéma d'optimisation dédié |
-| **LIPM par plateaux (quasi-statique)** | Extension pragmatique du pipeline existant (pas de nouvelle théorie) | Chaque marche = un plateau à `z_c` localement constant ; `omega` re-calculé par marche, transitions verticales absorbées en double-appui lent | Faible : surcharge de `self.fz` → `fz_k`, `omega` par palier, cloche de swing relative au max(départ, arrivée) |
+| **3D-DCM (eCMP/VRP)** | Englsberger, Ott, Albu-Schäffer, *IEEE T-RO* 31(2):355-368, 2015 | Extends the DCM to 3D; the *Virtual Repellent Point* encodes both the direction **and** the magnitude of the total force → handles variable `z_c` | High: rewriting the DCM recursion (2D→3D), a new vertical CoM reference |
+| **VHIP capturability** | Caron, Escande, Lanari, Mallein, *IEEE T-RO*, 2019 (*Capturability-based Pattern Generation for Walking with Variable Height*; HRP-4 stair demo) | Pattern generator on a variable-height pendulum, capturability over uneven terrain; solved fast enough for real-time MPC | Very high: a new pattern generator and a dedicated optimisation scheme |
+| **Plateau-wise LIPM (quasi-static)** | A pragmatic extension of the existing pipeline (no new theory) | Each step = a plateau at locally constant `z_c`; `omega` recomputed per step, vertical transitions absorbed in a slow double support | Low: overload `self.fz` → `fz_k`, `omega` per plateau, swing bell relative to max(takeoff, landing) |
 
-> ⚠️ **Note d'intégrité des sources.** Le `Caron2019` **déjà présent** dans `references.bib`
-> est le papier **ICRA** *Stair Climbing Stabilization of the HRP-4 … Whole-body Admittance
-> Control* (stabilisation par admittance, PAS la génération de motifs). Le papier **T-RO 2019**
-> *Capturability-based Pattern Generation with Variable Height* est **distinct** et devra
-> recevoir un BibKey séparé (proposition : `Caron2019VHIP`) **avec vol/pp/DOI vérifiés avant
-> insertion** — règle the thesis / §19 (jamais inventer). Englsberger2015 est également
-> à ajouter (`Englsberger2015`, T-RO 31(2):355-368) après vérification DOI.
+> ⚠️ **Source-integrity note.** The `Caron2019` **already present** in `references.bib` is the
+> **ICRA** paper *Stair Climbing Stabilization of the HRP-4 … Whole-body Admittance Control*
+> (admittance stabilisation, NOT pattern generation). The **T-RO 2019** paper
+> *Capturability-based Pattern Generation with Variable Height* is a **distinct** work and will
+> need its own BibKey (proposed: `Caron2019VHIP`) **with volume, pages and DOI verified before
+> insertion** — the thesis rule (§19): never invent. Englsberger2015 is likewise to be added
+> (`Englsberger2015`, T-RO 31(2):355-368) after DOI verification.
 
-> **Insight critique.** Le choix d'approche est un arbitrage risque/temps, pas de pureté
-> théorique. Le 3D-DCM et le VHIP sont les réponses « correctes » mais exigent de remplacer le
-> noyau de planification qui a demandé des semaines à stabiliser pour S2 — et qui reste fragile
-> (70 %). Les importer maintenant reviendrait à empiler deux sources d'instabilité non résolues.
-> La stratégie défendable pour un **premier jet** est l'approche par plateaux : elle est
-> honnête sur ses limites (elle *approxime* la dynamique verticale), elle réutilise un exécuteur
-> QP validé, et elle transforme la question en une hypothèse testable — « jusqu'à quelle hauteur
-> de marche l'approximation quasi-statique tient-elle ? » — plutôt qu'en un chantier ouvert.
-
----
-
-## 3. Approche retenue pour le premier jet : LIPM par plateaux + double-appui de montée
-
-**Décision (à valider) : approche par plateaux quasi-statiques**, avec bascule explicite vers
-3D-DCM/VHIP documentée comme *future work* si l'approximation échoue au-delà d'un seuil de
-hauteur. Justification : cohérence avec le risque the thesis Framework trop complexe,
-temps insuffisant → design modulaire, réduire horizon/DOF » (§8.4), et avec la ligne S2 (itérer
-sur un noyau maîtrisé plutôt que le remplacer).
-
-Mécanique proposée (surcharge, `talos_dcm_walk.py` et `_timing` **inchangés** — sous-classe S3) :
-
-1. **Plan de pas 3D.** Le plan `zmp[k]` (x,y) est augmenté d'une altitude `fz_k` par appui :
-   pieds au sol pour les premiers appuis, puis `fz_k = n_k · h_riser` où `n_k` est le numéro de
-   marche visé par l'appui `k`. Cadence de montée : un pied par marche (montée « step-over-step »
-   plutôt que « step-together », plus proche de S2 et évitant le double appui prolongé sur une
-   même marche).
-2. **`omega` par palier.** Recalcul de `omega_k = sqrt(g / z_c,k)` avec `z_c,k` la hauteur de CoM
-   nominale sur la marche `k` (≈ `z_c,0 + n_k · h_riser`). La montée du CoM est traitée comme une
-   rampe de référence pendant le double appui, pas comme une dynamique DCM active.
-3. **Cloche de swing sur-élevée.** La garde au sol devient relative au **point le plus haut**
-   entre décollage et pose : `z_swing(s) = max(fz_takeoff, fz_land) + STEP_H · sin(π s)`, avec
-   `STEP_H` augmenté (voir §4) pour dégager le nez de marche. C'est la modification qui adresse
-   directement la métrique *foot clearance*.
-4. **Détection de poser par marche.** `_foot_contact` teste déjà le contact avec le worldbody
-   (body 0) ; si les marches sont des `geom` enfants du worldbody, la détection reste valide
-   **sans modification**. La garde de hauteur `foot_z <= fz + FOOT_TOL` doit en revanche viser
-   `fz_land,k` et non le scalaire global.
-5. **Transfert vertical en double-appui.** Entre deux marches, allonger la fenêtre de double
-   appui (`DS_OVL`) pour laisser la référence de CoM monter quasi-statiquement avant d'engager
-   le swing suivant — c'est là que le travail vertical `m·g·h` est fourni, hors de la récursion
-   DCM.
-
-> **Insight critique.** L'approximation par plateaux déplace le problème plutôt qu'elle ne le
-> résout : elle suppose que la transition verticale peut être rendue « lente devant la dynamique
-> du DCM » via le double appui. Cette hypothèse est **fausse au-delà d'une certaine cadence** —
-> si le robot doit monter vite, le CoM accélère verticalement et le canal sagittal voit une
-> perturbation que le contrôleur plan ne compense pas. Le protocole (§6) doit donc **balayer la
-> hauteur de marche et la cadence** pour cartographier la frontière de validité, ce qui fait de
-> cette limite un résultat mesurable et non un angle mort.
+> **Critical insight.** The choice of approach is a risk/time trade-off, not a matter of
+> theoretical purity. 3D-DCM and VHIP are the "correct" answers but require replacing the
+> planning core that took weeks to stabilise for S2 — and that remains fragile (70 %). Importing
+> them now would stack two unresolved sources of instability. The defensible strategy for a
+> **first pass** is the plateau approach: it is honest about its limits (it *approximates* the
+> vertical dynamics), it reuses a validated QP executor, and it turns the question into a testable
+> hypothesis — "up to what step height does the quasi-static approximation hold?" — rather than
+> into an open-ended project.
 
 ---
 
-## 4. Géométrie de la scène MuJoCo (`scene_stairs.xml`)
+## 3. Approach adopted for the first pass: plateau-wise LIPM + a climbing double support
 
-La scène plate actuelle (`scene_motor.xml`) n'a qu'un `geom` plan. S3 requiert une nouvelle
-scène incluant `talos_motor.xml` et ajoutant 3 marches comme `geom` de type `box` enfants du
-worldbody (donc `geom_bodyid == 0`, ce qui préserve la logique de détection de contact existante).
+**Decision (to be confirmed): the quasi-static plateau approach**, with an explicit switch to
+3D-DCM/VHIP documented as *future work* should the approximation fail beyond a height threshold.
+Justification: consistency with the thesis risk "framework too complex, insufficient time →
+modular design, reduce horizon/DoF" (§8.4), and with the S2 line (iterate on a core that is
+mastered rather than replace it).
 
-Paramètres de conception proposés (à figer après vérification cinématique sur le modèle TALOS
-chargé — **valeurs de départ, statut : *design commitment*, non ancrées littérature**) :
+Proposed mechanics (by overload; `talos_dcm_walk.py` and `_timing` **unchanged** — an S3
+subclass):
 
-| Paramètre | Valeur de départ | Justification / à vérifier |
+1. **3D footstep plan.** The `zmp[k]` plan (x,y) is augmented with an altitude `fz_k` per
+   foothold: feet on the ground for the first footholds, then `fz_k = n_k · h_riser` where `n_k`
+   is the step number targeted by foothold `k`. Climbing cadence: one foot per step
+   ("step-over-step" rather than "step-together", closer to S2 and avoiding a prolonged double
+   support on a single step).
+2. **`omega` per plateau.** Recompute `omega_k = sqrt(g / z_c,k)` with `z_c,k` the nominal CoM
+   height on step `k` (≈ `z_c,0 + n_k · h_riser`). The CoM rise is treated as a reference ramp
+   during double support, not as active DCM dynamics.
+3. **Raised swing bell.** Ground clearance becomes relative to the **highest point** between
+   takeoff and landing: `z_swing(s) = max(fz_takeoff, fz_land) + STEP_H · sin(π s)`, with
+   `STEP_H` increased (see §4) to clear the step nosing. This is the modification that addresses
+   the *foot clearance* metric directly.
+4. **Per-step touchdown detection.** `_foot_contact` already tests contact with the worldbody
+   (body 0); if the steps are `geom` children of the worldbody, the detection stays valid
+   **without modification**. The height guard `foot_z <= fz + FOOT_TOL`, however, must target
+   `fz_land,k` rather than the global scalar.
+5. **Vertical transfer in double support.** Between two steps, lengthen the double-support window
+   (`DS_OVL`) to let the CoM reference rise quasi-statically before engaging the next swing —
+   this is where the vertical work `m·g·h` is supplied, outside the DCM recursion.
+
+> **Critical insight.** The plateau approximation displaces the problem rather than solving it:
+> it assumes the vertical transition can be made "slow relative to the DCM dynamics" through
+> double support. That assumption is **false beyond a certain cadence** — if the robot has to
+> climb fast, the CoM accelerates vertically and the sagittal channel sees a perturbation the
+> planar controller does not compensate. The protocol (§6) must therefore **sweep step height and
+> cadence** to map the validity boundary, which turns this limit into a measurable result rather
+> than a blind spot.
+
+---
+
+## 4. Geometry of the MuJoCo scene (`scene_stairs.xml`)
+
+The current flat scene (`scene_motor.xml`) has only a plane `geom`. S3 requires a new scene
+including `talos_motor.xml` and adding 3 steps as `box` geoms that are children of the worldbody
+(hence `geom_bodyid == 0`, which preserves the existing contact-detection logic).
+
+Proposed design parameters (to be frozen after a kinematic check on the loaded TALOS model —
+**starting values, status: *design commitment*, not anchored in the literature**):
+
+| Parameter | Starting value | Justification / to be checked |
 |-----------|------------------|----------------------------|
-| Hauteur de contremarche `h_riser` | **0.10 m** | Conservateur vs marches humaines (~0.17 m) ; ordre de grandeur des démos robot escalier. À balayer {0.05, 0.10, 0.15}. |
-| Profondeur de giron `d_tread` | **0.30 m** | ≥ longueur de semelle TALOS (~0.20 m) + marge d'appui. Vérifier la semelle réelle dans `talos.xml`. |
-| Largeur de marche | **1.0 m** | Large : élimine tout couplage latéral parasite pour ce premier jet. |
-| Nombre de marches | **3** | Fixé par the thesis |
-| Garde au sol cible `STEP_H` | **≥ 0.12 m** | Doit dépasser `h_riser` + marge de sécurité (≥ 2 cm) pour ne pas taper le nez de marche ; base plate = 0.04 m, très insuffisant. |
+| Riser height `h_riser` | **0.10 m** | Conservative against human steps (~0.17 m); the order of magnitude of robot stair demos. To be swept over {0.05, 0.10, 0.15}. |
+| Tread depth `d_tread` | **0.30 m** | ≥ TALOS sole length (~0.20 m) + support margin. Check the real sole in `talos.xml`. |
+| Step width | **1.0 m** | Wide: removes any spurious lateral coupling for this first pass. |
+| Number of steps | **3** | Fixed by the thesis |
+| Target ground clearance `STEP_H` | **≥ 0.12 m** | Must exceed `h_riser` plus a safety margin (≥ 2 cm) so as not to strike the nosing; the flat baseline is 0.04 m, far too little. |
 
-Structure XML pressentie (esquisse, à implémenter au jet suivant) : palier de départ plan,
-puis 3 `box` empilés en escalier (chaque marche = un bloc dont la face supérieure est à
-`n · h_riser`), palier d'arrivée plan pour la phase d'équilibre finale (réutilise la logique
-`ended` de `_timing`).
+Anticipated XML structure (sketch, to be implemented in the next pass): a flat starting landing,
+then 3 `box` geoms stacked as a staircase (each step a block whose top face is at `n · h_riser`),
+and a flat arrival landing for the final balancing phase (reusing the `ended` logic of `_timing`).
 
-> **Insight critique.** Le paramètre décisif est le rapport `STEP_H / h_riser`. Une garde trop
-> basse fait taper le pied dans la contremarche (échec de clearance) ; une garde trop haute
-> allonge le vol, retarde le poser et — d'après la mécanique S2 — laisse le DCM latéral diverger
-> davantage avant le contact, ce qui a été la cause dominante des chutes S2. S3 hérite donc
-> **directement** de la fragilité de timing de S2 : monter demande des pas plus hauts, or des
-> pas plus hauts aggravent précisément le mode d'échec déjà diagnostiqué. Cette interaction doit
-> être surveillée dès le premier run.
+> **Critical insight.** The decisive parameter is the ratio `STEP_H / h_riser`. Too little
+> clearance and the foot strikes the riser (a clearance failure); too much lengthens the flight,
+> delays touchdown and — per the S2 mechanics — lets the lateral DCM diverge further before
+> contact, which was the dominant cause of the S2 falls. S3 therefore inherits S2's timing
+> fragility **directly**: climbing demands higher steps, and higher steps aggravate precisely the
+> failure mode already diagnosed. This interaction must be watched from the first run.
 
 ---
 
-## 5. Métriques S3
+## 5. S3 metrics
 
-### 5.1 Métriques principales (§9.4)
+### 5.1 Primary metrics (§9.4)
 
-| Métrique | Définition opérationnelle | Instrumentation |
+| Metric | Operational definition | Instrumentation |
 |----------|---------------------------|-----------------|
-| **Foot clearance** | Hauteur minimale du point le plus bas de la semelle de balancement **au-dessus du nez de la marche franchie**, sur toute la phase de vol. Positive = franchit ; négative = collision. | Nouvelle : distance semelle↔arête de marche par tick pendant le swing (via `d.xpos` du pied + géométrie connue des marches). |
-| **Forces de contact** | Pic et moyenne de la GRF normale au poser sur chaque marche ; distribution make/break (rebonds). | **Déjà disponible** : `_grf_z(fb)` + fenêtre `_land_metrics_tick` (réutilisées telles quelles de `_timing`). |
+| **Foot clearance** | Minimum height of the lowest point of the swing sole **above the nosing of the step being crossed**, over the whole flight phase. Positive = cleared; negative = collision. | New: sole-to-step-edge distance per tick during swing (from the foot's `d.xpos` plus the known step geometry). |
+| **Contact forces** | Peak and mean normal GRF at touchdown on each step; make/break distribution (bounces). | **Already available**: `_grf_z(fb)` + the `_land_metrics_tick` window (reused unchanged from `_timing`). |
 
-### 5.2 Métriques transverses (report, seuils the thesis)
+### 5.2 Transverse metrics (reported, thesis thresholds)
 
-CoM tracking RMSE (< 3 cm steady-state), QP feasibility rate (> 99 %), friction-cone compliance
-(100 % par construction), QP solve time (< 1 ms mean / < 5 ms p99), task success rate
-(montée complète des 3 marches + équilibre final, > 90 %, Wilson 95 % CI, N ≥ 20).
+CoM tracking RMSE (< 3 cm steady state), QP feasibility rate (> 99 %), friction-cone compliance
+(100 % by construction), QP solve time (< 1 ms mean / < 5 ms p99), task success rate (complete
+ascent of the 3 steps + final balance, > 90 %, Wilson 95 % CI, N ≥ 20).
 
-> **Insight critique.** Le *foot clearance* est la seule métrique **nouvelle** de la campagne et
-> la seule sans seuil ancré dans la littérature : the thesis ne le référence pas. Il
-> faudra le déclarer explicitement *design commitment* (comme les autres seuils non ancrés) et
-> proposer un seuil justifié — a minima « clearance > 0 sur 100 % des franchissements réussis »,
-> idéalement une marge positive (ex. ≥ 2 cm) reliant clearance et robustesse. Ne pas laisser ce
-> seuil implicite, sous peine de reproduire la critique reviewer « métriques arbitraires » (§18).
-
----
-
-## 6. Protocole de campagne
-
-Cohérent avec la méthodologie S1/S2 (Wilson CI, N ≥ 20, seed reproductible) et avec le **caveat
-de non-déterminisme** documenté pour S2 (l'unité reproductible est le **taux agrégé**, pas le
-label par seed) :
-
-1. **Bring-up déterministe** (seed unique, sans bruit) : valider qu'une montée nominale des 3
-   marches est possible avant toute statistique. Livrable : une trajectoire `s3_run.npz` + vidéo.
-2. **Balayage de conception** : `h_riser ∈ {0.05, 0.10, 0.15}` × cadence (via `T_STEP`) pour
-   localiser la frontière de validité de l'approximation par plateaux (§3). Non statistique —
-   sonde de faisabilité.
-3. **Campagne statistique** : au meilleur point de conception, batch N ≥ 20 seeds → taux de
-   succès + Wilson CI, sur le modèle exact de `s2_batch.py`. Report : clearance (min/mean/CI),
-   GRF (pic/mean), CoM RMSE par marche, ctrl p99.
-4. **Ablations** : garde au sol `STEP_H` haute vs basse ; double-appui de montée long vs court.
-
-> **Insight critique.** Reprendre `s2_batch.py` garantit la comparabilité méthodologique entre
-> S1, S2 et S3 — atout pour l'argument « protocole d'évaluation reproductible » (contribution
-> PQ4). Mais le non-déterminisme par seed diagnostiqué en S2 (bifurcation discrète de l'ensemble
-> actif du QP) **se propagera à S3** et sera probablement **amplifié** : les contacts au ras des
-> arêtes de marche multiplient les décisions marginales d'inclusion de contact. Il faut donc
-> anticiper que le taux agrégé S3 aura une CI plus large à N égal, et dimensionner N en
-> conséquence (peut-être N ≥ 35 comme il a fallu le faire pour trancher S2).
+> **Critical insight.** *Foot clearance* is the campaign's only **new** metric and the only one
+> without a threshold anchored in the literature: the thesis does not reference one. It will have
+> to be declared explicitly as a *design commitment* (like the other unanchored thresholds) and
+> given a justified threshold — at minimum "clearance > 0 on 100 % of successful crossings",
+> ideally a positive margin (say ≥ 2 cm) linking clearance to robustness. This threshold must not
+> be left implicit, on pain of reproducing the reviewer objection "arbitrary metrics" (§18).
 
 ---
 
-## 7. Points de contact code (résumé pour l'implémentation)
+## 6. Campaign protocol
 
-Sous-classe `DCMWalkS3(DCMWalkT)` — aucune modification de `talos_dcm_walk.py`, `talos_wbc.py`,
-ni `talos_dcm_walk_timing.py` (même discipline que le passage S1→S2) :
+Consistent with the S1/S2 methodology (Wilson CI, N ≥ 20, reproducible seed) and with the
+**non-determinism caveat** documented for S2 (the reproducible unit is the **aggregate rate**,
+not the per-seed label):
 
-- `self.fz` scalaire → tableau `fz_k` indexé par appui (ou fonction `foot_height(k)`).
-- `omega` unique → `omega_k` recalculé au changement de marche.
-- `z_swing` : cloche relative à `max(fz_takeoff, fz_land)` + `STEP_H` majoré.
-- garde de poser `foot_z <= fz + FOOT_TOL` → viser `fz_land,k`.
-- nouvelle métrique clearance (par tick de swing) ajoutée au `log`.
-- nouvelle scène `scene_stairs.xml` (3 `box` enfants du worldbody).
-- `_grf_z` / `_land_metrics_tick` / `_foot_contact` : **réutilisés sans changement**.
+1. **Deterministic bring-up** (single seed, no noise): confirm that a nominal ascent of the 3
+   steps is possible before any statistics. Deliverable: one `s3_run.npz` trajectory + a video.
+2. **Design sweep**: `h_riser ∈ {0.05, 0.10, 0.15}` × cadence (through `T_STEP`) to locate the
+   validity boundary of the plateau approximation (§3). Not statistical — a feasibility probe.
+3. **Statistical campaign**: at the best design point, a batch of N ≥ 20 seeds → success rate +
+   Wilson CI, on the exact model of `s2_batch.py`. Report: clearance (min/mean/CI), GRF
+   (peak/mean), CoM RMSE per step, ctrl p99.
+4. **Ablations**: high against low ground clearance `STEP_H`; long against short climbing double
+   support.
 
-> **Insight critique.** La discipline « sous-classe uniquement, noyau intact » a permis de garder
-> S1 valide pendant tout le développement S2. La tenir pour S3 est ce qui rend la campagne
-> défendable : si S3 échoue, l'échec est localisé dans la couche escalier, pas dans un exécuteur
-> QP qu'il faudrait re-valider. Toute tentation de « corriger vite » `talos_dcm_walk.py` pour
-> faire passer S3 briserait cette traçabilité et invaliderait rétroactivement S1/S2.
+> **Critical insight.** Reusing `s2_batch.py` guarantees methodological comparability between S1,
+> S2 and S3 — an asset for the "reproducible evaluation protocol" argument. But the per-seed
+> non-determinism diagnosed in S2 (a discrete bifurcation of the QP active set) **will propagate
+> to S3** and will probably be **amplified**: contacts grazing the step edges multiply the
+> marginal contact-inclusion decisions. One must therefore expect the aggregate S3 rate to carry
+> a wider CI at equal N, and size N accordingly (perhaps N ≥ 35, as proved necessary to settle
+> S2).
 
 ---
 
-## 8. Risques spécifiques S3
+## 7. Code touch points (summary for the implementation)
 
-| Risque | Type | Mitigation |
+Subclass `DCMWalkS3(DCMWalkT)` — no modification to `talos_dcm_walk.py`, `talos_wbc.py` or
+`talos_dcm_walk_timing.py` (the same discipline as the S1→S2 transition):
+
+- scalar `self.fz` → array `fz_k` indexed by foothold (or a `foot_height(k)` function).
+- single `omega` → `omega_k` recomputed on a step change.
+- `z_swing`: bell relative to `max(fz_takeoff, fz_land)` + an increased `STEP_H`.
+- touchdown guard `foot_z <= fz + FOOT_TOL` → target `fz_land,k`.
+- new clearance metric (per swing tick) added to the `log`.
+- new scene `scene_stairs.xml` (3 `box` children of the worldbody).
+- `_grf_z` / `_land_metrics_tick` / `_foot_contact`: **reused unchanged**.
+
+> **Critical insight.** The "subclass only, core untouched" discipline is what kept S1 valid
+> throughout the S2 development. Holding to it for S3 is what makes the campaign defensible: if
+> S3 fails, the failure is localised in the stair layer, not in a QP executor that would then have
+> to be re-validated. Any temptation to "quickly fix" `talos_dcm_walk.py` to make S3 pass would
+> break that traceability and retroactively invalidate S1/S2.
+
+---
+
+## 8. S3-specific risks
+
+| Risk | Type | Mitigation |
 |--------|------|------------|
-| Approximation par plateaux invalide au-delà de `h_riser` seuil | Modèle | Balayage §6.2 : transformer la limite en résultat mesuré ; bascule 3D-DCM = future work |
-| Garde au sol ↔ divergence DCM (pas hauts aggravent le mode d'échec S2) | Technique | Ablation `STEP_H` ; surveiller clearance vs t_chute dès le bring-up |
-| Non-déterminisme QP amplifié par contacts au ras des arêtes | Reproductibilité | Report du taux agrégé (pas du label seed) ; N ≥ 35 si CI trop large |
-| Semelle plus longue que le giron → sur-débord | Géométrie | Vérifier semelle TALOS réelle vs `d_tread` avant de figer la scène |
-| Sources Englsberger2015 / Caron2019VHIP non vérifiées | Intégrité | Vérifier vol/pp/DOI avant insertion `references.bib` (règle §17-5) |
+| Plateau approximation invalid beyond a threshold `h_riser` | Model | Sweep §6.2: turn the limit into a measured result; switching to 3D-DCM is future work |
+| Ground clearance ↔ DCM divergence (high steps aggravate the S2 failure mode) | Technical | `STEP_H` ablation; watch clearance against time-to-fall from the bring-up onwards |
+| QP non-determinism amplified by contacts grazing the edges | Reproducibility | Report the aggregate rate (not the seed label); N ≥ 35 if the CI is too wide |
+| Sole longer than the tread → overhang | Geometry | Check the real TALOS sole against `d_tread` before freezing the scene |
+| Englsberger2015 / Caron2019VHIP sources unverified | Integrity | Verify volume, pages and DOI before inserting into `references.bib` (rule §17-5) |
 
-> **Insight critique.** Le risque dominant n'est pas technique mais **narratif** : S2 étant à
-> 70 % (FAIL vs seuil 90 %), lancer S3 sur le même noyau fragile expose à une seconde métrique
-> sous le seuil. La parade n'est pas de « faire mieux à tout prix » mais de cadrer S3, comme S2,
-> en résultat honnête et diagnostiqué — la contribution de la thèse étant le *protocole* et les
-> *diagnostics*, pas un taux de succès. Ce document pose ce cadre avant le premier run.
-
----
-
-## 9. Prochaines actions
-
-1. **Vérifier la cinématique TALOS** (longueur de semelle, hauteur de hanche) sur le modèle
-   chargé pour figer `d_tread` et `h_riser` de départ.
-2. **Écrire `scene_stairs.xml`** (3 `box`, palier départ/arrivée).
-3. **Écrire `DCMWalkS3`** (sous-classe : `fz_k`, `omega_k`, cloche sur-élevée, métrique clearance).
-4. **Bring-up déterministe** → `s3_run.npz` + vidéo.
-5. **Vérifier + insérer** `Englsberger2015` et `Caron2019VHIP` dans `references.bib` (DOI validés).
-6. Rédiger **Ch5 §5.6** une fois le bring-up obtenu.
+> **Critical insight.** The dominant risk is not technical but **narrative**: with S2 at 70 %
+> (FAIL against the 90 % threshold), launching S3 on the same fragile core exposes the work to a
+> second metric below threshold. The answer is not to "do better at any cost" but to frame S3, as
+> S2 was framed, as an honest and diagnosed result — the thesis contribution being the *protocol*
+> and the *diagnoses*, not a success rate. This document sets that frame before the first run.
 
 ---
 
-*Ce document est la spécification de conception S3. Il ne modifie aucun résultat validé
-(S1) ni le noyau de contrôle. Toute implémentation doit s'y conformer ou signaler l'écart.*
+## 9. Next actions
+
+1. **Verify the TALOS kinematics** (sole length, hip height) on the loaded model in order to
+   freeze the starting `d_tread` and `h_riser`.
+2. **Write `scene_stairs.xml`** (3 `box` geoms, start and arrival landings).
+3. **Write `DCMWalkS3`** (subclass: `fz_k`, `omega_k`, raised bell, clearance metric).
+4. **Deterministic bring-up** → `s3_run.npz` + video.
+5. **Verify and insert** `Englsberger2015` and `Caron2019VHIP` into `references.bib` (DOIs
+   validated).
+6. Write **Ch5 §5.6** once the bring-up is obtained.
+
+---
+
+*This document is the S3 design specification. It modifies no validated result (S1) and no part
+of the control core. Any implementation must conform to it or flag the departure.*

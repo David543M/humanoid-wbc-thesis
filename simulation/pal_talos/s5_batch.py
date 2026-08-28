@@ -1,14 +1,14 @@
 """
 S5 — Balayage magnitude x direction + bras controle (spec : s5_design.md §6).
 
-Patron s2_batch.py : sous-processus par essai (isolation), agregation Wilson
-PAR CELLULE (mag, dir), bras controle mag=0 (memes seeds, meme fenetre
-virtuelle), interpolation I50 par direction (impulsion a 50 % de
-recuperation) = livrable de calibration qui ferme le flag Ch3 §3.6.
+Pattern of s2_batch.py: one subprocess per trial (isolation), Wilson aggregation
+PER CELL (mag, dir), mag=0 control arm (same seeds, same virtual window),
+per-direction I50 interpolation (impulse at 50 % recovery) = the calibration
+deliverable that closes the Ch3 §3.6 flag.
 
-Statistique par cellule : recovery rate = recovered / eligibles (essais
+Per-cell statistic: recovery rate = recovered / eligible (trials
 debout a t_push). Les essais non eligibles (chute pre-push, heritage S2
-~30 %) sont comptes a part — ils relevent de S2, deja caracterise.
+~30 %) are counted separately - they belong to S2, already characterised.
 
 Usage (terminal Anaconda, depuis pal_talos/) :
     python s5_batch.py                          # 4 dirs x {0,50..250} N x 10 seeds
@@ -18,7 +18,7 @@ Usage (terminal Anaconda, depuis pal_talos/) :
 import argparse, csv, os, subprocess, sys, time
 import numpy as np
 
-# alias sans tiret (argparse avale "-y"/"-x" nus — cf. talos_s5_perturb)
+# dashless aliases (argparse swallows bare "-y"/"-x" - see talos_s5_perturb)
 DIR_ALIAS = {"px": "+x", "mx": "-x", "py": "+y", "my": "-y",
              "x": "+x", "y": "+y", "x+": "+x", "y+": "+y",
              "x-": "-x", "y-": "-y"}
@@ -67,12 +67,12 @@ def run_trial(seed, mag, dr, outdir, extra):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=10, help="seeds par cellule (>=10 ; 20 pres de I50)")
+    ap.add_argument("--n", type=int, default=10, help="seeds per cell (>=10; 20 near I50)")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--mags", type=float, nargs="+", default=[50, 100, 150, 200, 250])
     ap.add_argument("--dirs", type=str, nargs="+", default=["+x", "-x", "+y", "-y"])
     ap.add_argument("--no-control", dest="control", action="store_false",
-                    help="sans bras controle mag=0 (DECONSEILLE, cf. s5_design §2)")
+                    help="without the mag=0 control arm (NOT RECOMMENDED, see s5_design §2)")
     ap.add_argument("--outdir", type=str, default="s5_batch")
     ap.add_argument("extra", nargs=argparse.REMAINDER,
                     help="args passes au script apres -- (ex : -- --trec 5.0)")
@@ -88,7 +88,7 @@ def main():
         raise SystemExit("[ABORT] arguments extra suspects : %s" % junk)
     os.makedirs(a.outdir, exist_ok=True)
     seeds = list(range(a.start, a.start + a.n))
-    # le controle est une cellule (mag 0) partagee par toutes les directions
+    # the control arm is a single cell (mag 0) shared by every direction
     cells = ([(0.0, a.dirs[0])] if a.control else []) + \
             [(m_, d_) for d_ in a.dirs for m_ in a.mags]
     print("S5 BATCH  %d cellules x %d seeds (%d essais)  dirs=%s mags=%s  -> %s/"
@@ -126,7 +126,7 @@ def main():
                 raise SystemExit("[ABORT] 1er essai en crash — corriger avant de "
                                  "relancer (log : %s)" % log_path)
 
-    # ---------- agregation par cellule ----------
+    # ---------- per-cell aggregation ----------
     lines = ["# S5 batch — %d seeds/cellule (seeds %d..%d)%s" %
              (a.n, seeds[0], seeds[-1], "  extra: " + " ".join(extra) if extra else ""),
              "",
@@ -144,7 +144,7 @@ def main():
                      % (mag, dr if mag > 0 else "ctrl", n, len(sel), k,
                         "%.2f" % (k / n) if n else "n/a", lo, hi))
 
-    # ---------- I50 par direction (interpolation lineaire) ----------
+    # ---------- I50 per direction (linear interpolation) ----------
     lines += ["", "## Marge I50 (impulsion a 50 % de recuperation, N.s)", ""]
     dur = 0.10  # defaut --pushdur ; adapter si surcharge via extra
     for dr in a.dirs:
@@ -158,10 +158,10 @@ def main():
         if i50 is not None:
             lines.append("- **%s : I50 ~ %.1f N.s** (F50 ~ %.0f N)" % (dr, i50, i50 / dur))
         elif pts and all(r > 0.5 for _, r in pts):
-            lines.append("- %s : I50 > %.1f N.s (toutes cellules > 50 %% — etendre le balayage)"
+            lines.append("- %s: I50 > %.1f N.s (all cells > 50 %% - extend the sweep)"
                          % (dr, max(m_ for m_, _ in pts) * dur))
         elif pts:
-            lines.append("- %s : I50 < %.1f N.s (toutes cellules < 50 %% — reduire le balayage)"
+            lines.append("- %s: I50 < %.1f N.s (all cells < 50 %% - reduce the sweep)"
                          % (dr, min(m_ for m_, _ in pts) * dur))
         else:
             lines.append("- %s : aucune cellule eligible" % dr)

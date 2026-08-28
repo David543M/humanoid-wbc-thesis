@@ -1,45 +1,45 @@
 """
-S3 — Batch N seeds sur le sequenceur quasi-statique (config gelee QS #5c + polish 6a).
+S3 — Batch of N seeds on the quasi-static sequencer (frozen config QS #5c + polish 6a).
 
-MOTIVATION (2026-08-06) : Ch5 par.5.6 rapportait la montee 3/3 a partir d'UN
-SEUL run. La contribution declaree de la these (PQ4) etant precisement le protocole
-batch + intervalle de Wilson, un scenario rapporte sur un run unique n'y satisfait pas.
-Ce batch applique le meme protocole a S3, ou le transforme en
-limite chiffree.
+MOTIVATION (2026-08-06): Ch5 par.5.6 reported the 3/3 climb from a SINGLE
+run. Since the thesis's declared contribution is the batch protocol with a Wilson
+interval, a scenario reported from a single run does not satisfy it. This batch applies the
+same protocol to S3, whether the result confirms the capability or turns it into a
+quantified limit.
 
-Lance talos_s3_stairs_qs.py en SOUS-PROCESSUS par seed. L'isolation par processus n'est
-PAS un detail de confort : les scripts mutent des globals partages (talos_wbc.MODEL,
-gains) et tout enchainement dans un meme interpreteur est invalide (finding transverse
-2026-07-30, contamination d'etat inter-scenarios). Meme patron que s2_batch.py /
-s4_batch.py, qui ne sont donc pas affectes.
+Runs talos_s3_stairs_qs.py in a SUBPROCESS per seed. Per-process isolation is
+NOT a convenience detail: the scripts mutate shared globals (talos_wbc.MODEL,
+gains) and any chaining within a single interpreter is invalid (cross-cutting finding
+2026-07-30, inter-scenario state contamination). Same pattern as s2_batch.py /
+s4_batch.py, which are therefore unaffected.
 
-VERDICT PRE-ENREGISTRE (identique au critere du script, aucune latitude apres coup) :
-    success = UPRIGHT  ET  3/3 marches atteintes  ET  etat final DONE
-Le bruit initial est le meme que S2 (qvel sigma=0.01 via default_rng(seed)), donc le
-taux agrege est directement comparable aux 70 % de S2.
+PRE-REGISTERED VERDICT (identical to the script's criterion, no latitude after the fact):
+    success = UPRIGHT  AND  3/3 steps reached  AND  final state DONE
+The initial noise is the same as S2 (qvel sigma=0.01 via default_rng(seed)), so the
+aggregate rate is directly comparable to the 70 % of S2.
 
-Sorties dans OUTDIR : s3_seed<k>.npz + s3_seed<k>.log, s3_batch_summary.npz,
+Outputs in OUTDIR: s3_seed<k>.npz + s3_seed<k>.log, s3_batch_summary.npz,
 s3_batch_report.md, s3_batch_rows.csv.
 
-Usage (terminal Anaconda, depuis pal_talos/) :
-    python s3_batch.py                       # 20 seeds (0..19), config gelee S3-QS
-    python s3_batch.py --n 30 --start 0      # confirmatoire (N >= 35 pour un verdict PASS)
-    python s3_batch.py --outdir s3_batch_h15 -- --hriser 0.15   # variante : args apres --
+Usage (Anaconda terminal, from pal_talos/):
+    python s3_batch.py                       # 20 seeds (0..19), frozen S3-QS config
+    python s3_batch.py --n 30 --start 0      # confirmatory (N >= 35 for a PASS verdict)
+    python s3_batch.py --outdir s3_batch_h15 -- --hriser 0.15   # variant: args after --
 """
 import argparse, csv, os, subprocess, sys, time
 import numpy as np
 
-# Config gelee = les defauts du succes 3/3 (QS #5c + w_foot_stance=1400), passes
-# EXPLICITEMENT pour que le report soit auto-documente et rejouable sans lire le script.
+# Frozen config = the defaults of the 3/3 success (QS #5c + w_foot_stance=1400), passed
+# EXPLICITLY so the report is self-documenting and replayable without reading the script.
 FROZEN = ["--rate", "0.18", "--tswing", "0.65", "--ttrmax", "3.0",
           "--postol", "0.035", "--clear", "0.14", "--hriser", "0.10"]
 SCRIPT = "talos_s3_stairs_qs.py"
-TIMEOUT = 1800         # s par essai (la montee QS est lente : ~25 s de sim, marge large)
+TIMEOUT = 1800         # s per trial (the QS climb is slow: ~25 s of sim, wide margin)
 Z = 1.959963984540054  # 95 %
 
 
 def wilson(k, n, z=Z):
-    """Intervalle de Wilson 95 % pour k succes sur n essais -> (low, high)."""
+    """95 % Wilson interval for k successes out of n trials -> (low, high)."""
     if n == 0:
         return 0.0, 1.0
     p = k / n
@@ -65,38 +65,38 @@ def run_seed(seed, outdir, extra):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=20, help="nombre d'essais (Table 3.1 : N >= 20 pilote)")
-    ap.add_argument("--start", type=int, default=0, help="premier seed")
+    ap.add_argument("--n", type=int, default=20, help="number of trials (Table 3.1: N >= 20 pilot)")
+    ap.add_argument("--start", type=int, default=0, help="first seed")
     ap.add_argument("--outdir", type=str, default="s3_batch")
     ap.add_argument("--thresh", type=float, default=0.90,
-                    help="critere : borne basse Wilson > thresh (Table 3.1)")
+                    help="criterion: Wilson lower bound > thresh (Table 3.1)")
     ap.add_argument("extra", nargs=argparse.REMAINDER,
-                    help="args passes au sequenceur apres -- (ex : -- --hriser 0.15)")
+                    help="args passed to the sequencer after -- (e.g.: -- --hriser 0.15)")
     a = ap.parse_args()
     extra = [e for e in a.extra if e != "--"]
-    # garde-fou cmd.exe (repris de s2_batch.py) : un commentaire '# ...' colle a la
-    # commande n'est PAS ignore par cmd -> il atterrit dans extra et fait crasher le
-    # script enfant (batch 2026-07-08 : 0/20 artificiel, essais de 0-1 s).
+    # cmd.exe guard (taken from s2_batch.py): a comment '# ...' appended to the
+    # command is NOT ignored by cmd -> it ends up in extra and crashes the child
+    # script (batch 2026-07-08: artificial 0/20, trials of 0-1 s).
     for i, e in enumerate(extra):
         if e.startswith("#"):
             extra = extra[:i]; break
     junk = [e for i, e in enumerate(extra)
             if not e.startswith("-") and (i == 0 or not extra[i - 1].startswith("-"))]
     if junk:
-        raise SystemExit("[ABORT] arguments extra suspects (pas des options) : %s" % junk)
+        raise SystemExit("[ABORT] suspicious extra arguments (not options): %s" % junk)
     os.makedirs(a.outdir, exist_ok=True)
     seeds = list(range(a.start, a.start + a.n))
-    print("S3 BATCH  N=%d seeds=%d..%d  config gelee %s  extra=%s  -> %s/"
+    print("S3 BATCH  N=%d seeds=%d..%d  frozen config %s  extra=%s  -> %s/"
           % (a.n, seeds[0], seeds[-1], " ".join(FROZEN), extra or "-", a.outdir))
-    print("  verdict pre-enregistre : UPRIGHT et 3/3 marches et etat final DONE")
-    # Regle Ch5 par.5.2 : le verdict est la BORNE BASSE de Wilson, pas le taux ponctuel.
-    # Consequence arithmetique : a N=20, meme 20/20 ne donne que LB=0.839 -> un batch
-    # pilote peut ECHOUER mais jamais REUSSIR. N=35 est le premier N ou 35/35 franchit
-    # 0.90 (LB=0.901). Lancer N<35 en esperant un PASS est une perte de temps.
+    print("  pre-registered verdict: UPRIGHT and 3/3 steps and final state DONE")
+    # Ch5 par.5.2 rule: the verdict is the Wilson LOWER BOUND, not the point estimate.
+    # Arithmetic consequence: at N=20, even 20/20 only gives LB=0.839 -> a pilot
+    # batch can FAIL but never PASS. N=35 is the first N at which 35/35 clears
+    # 0.90 (LB=0.901). Running N<35 hoping for a PASS is a waste of time.
     if a.n < 35 and a.thresh >= 0.90:
-        print("  [!] N=%d : un verdict PASS est ARITHMETIQUEMENT IMPOSSIBLE (35/35 -> LB=0.901"
-              " est le premier cas favorable). Ce batch est un PILOTE : il peut falsifier,"
-              " pas valider. Utiliser --n 35 (ou plus) pour un batch confirmatoire." % a.n)
+        print("  [!] N=%d: a PASS verdict is ARITHMETICALLY IMPOSSIBLE (35/35 -> LB=0.901"
+              " is the first favourable case). This batch is a PILOT: it can falsify,"
+              " not validate. Use --n 35 (or more) for a confirmatory batch." % a.n)
 
     rows = []
     for s in seeds:
@@ -110,8 +110,8 @@ def main():
             try:
                 d = np.load(npz_path, allow_pickle=False)
                 cm = d["ctrl_ms"]
-                # purge des artefacts de timer (cf. methodo 2026-07-15 : des valeurs
-                # aberrantes jusqu'a 1e7 ms polluent les stats si on ne filtre pas)
+                # purge timer artefacts (cf. methodology 2026-07-15: outlier values
+                # up to 1e7 ms pollute the stats if not filtered)
                 cmv = cm[np.isfinite(cm) & (cm < 1000.0)]
                 nq, nt = int(d["qp_fail"]), max(int(d["n_ticks"]), 1)
                 row.update(success=bool(d["success"]), upright=bool(d["upright"]),
@@ -130,23 +130,23 @@ def main():
                            cot=_em / (_ms * 9.81 * _dd) if _dd > 0.1 else np.nan)
             except Exception as e:
                 row["status"] = "npz_error:%s" % e
-        elif status == "ok":                     # process sorti sans npz = CRASH
+        elif status == "ok":                     # process exited without an npz = CRASH
             row["status"] = "crash"
         rows.append(row)
-        print("  seed %2d : %-7s %s  %d/3 marches  mi=%2d/%2d  dist=%5.2f m  (%.0f s)"
+        print("  seed %2d : %-7s %s  %d/3 steps  mi=%2d/%2d  dist=%5.2f m  (%.0f s)"
               % (s, row["status"], "SUCCESS" if row["success"] else "fail   ",
                  max(row["n_climbed"], 0), row["mi"], row["n_moves"], row["dist"], wall))
         if row["status"] == "crash":
             try:
                 tail = [l.rstrip() for l in open(log_path, encoding="utf-8", errors="replace")][-3:]
             except OSError:
-                tail = ["(log illisible)"]
+                tail = ["(log unreadable)"]
             for l in tail:
                 print("      | %s" % l)
             if s == seeds[0]:
-                raise SystemExit("[ABORT] le 1er essai a crashe — corriger avant de relancer (log : %s)" % log_path)
+                raise SystemExit("[ABORT] the 1st trial crashed — fix before re-running (log: %s)" % log_path)
 
-    # ---------- agregation ----------
+    # ---------- aggregation ----------
     n = len(rows); k = sum(r["success"] for r in rows)
     lo, hi = wilson(k, n)
     ok = [r for r in rows if r["success"]]
@@ -177,8 +177,8 @@ def main():
         m, sd = mstd(key, sel)
         lines.append("| %s (%s, %s) | %.2f +/- %.2f |"
                      % (label, "succes seuls" if sel is ok else "tous", unit, m, sd))
-    # distribution du nombre de marches : distingue "echoue tot" de "echoue au sommet",
-    # qui n'ont pas la meme lecture (le mode d'echec du run 3/3 etait le settle final)
+    # distribution of the number of steps: distinguishes "fails early" from "fails at the top",
+    # which do not read the same way (the failure mode of the 3/3 run was the final settle)
     lines.append("")
     lines.append("Marches atteintes : " + ", ".join(
         "%d/3 -> %d essai(s)" % (v, sum(1 for r in rows if r["n_climbed"] == v))
@@ -191,10 +191,10 @@ def main():
             % (r["seed"], r["status"], max(r["n_climbed"], 0), r["state"], r["fell_at"])
             for r in fails))
     lines.append("")
-    lines.append("> ATTENTION metrique clearance : le logger `_clear_tick` du sequenceur")
-    lines.append("> remonte 0 franchissement sur un run complet (item P4 du backlog polish,")
-    lines.append("> non corrige — toucher le swing avait regresse la montee 3 fois). La garde")
-    lines.append("> de swing n'est donc PAS chiffrable depuis ce batch ; ne pas la rapporter.")
+    lines.append("> WARNING on the clearance metric: the sequencer's `_clear_tick` logger")
+    lines.append("> reports 0 crossings over a complete run (backlog polish item P4,")
+    lines.append("> not fixed - touching the swing had regressed the climb three times). Swing")
+    lines.append("> clearance is therefore NOT quantifiable from this batch; do not report it.")
     report = "\n".join(lines)
     print("\n" + report)
 

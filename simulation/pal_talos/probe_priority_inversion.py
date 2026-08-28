@@ -1,29 +1,29 @@
 """
-probe_priority_inversion.py — le hasard que la baseline HQP aurait arbitre,
-mesure directement sur l'executeur pondere existant.
+probe_priority_inversion.py — the hazard the HQP baseline would have arbitrated,
+measured directly on the existing weighted executor.
 
-Ch3 §3.4 (insight) : « une limite de couple active peut detourner l'effort
-d'optimisation d'une tache de bande superieure encodee seulement par son poids,
-produisant une degradation de suivi invisible dans le statut de sortie du solveur. »
+Ch3 §3.4 (insight): "an active torque limit can divert the optimisation effort
+away from a higher-band task encoded only by its weight,
+producing a tracking degradation invisible in the solver's exit status."
 
-C'est testable sans implementer de HQP. A chaque tick on lit la solution REELLE
-du QP (patch sur solve_qp, aucune reimplementation de control()), on determine
-quelles bornes de couple sont actives, et on calcule les residus de tache :
-    r_com = ||Jcom qdd* - a_com||   (poids 100)
-    r_ori = ||Jori qdd* - a_ori||   (poids  40)
-    r_pos = ||Jpos qdd* - a_pos||   (poids   1)
+This is testable without implementing an HQP. At each tick we read the ACTUAL QP
+solution (patch on solve_qp, no reimplementation of control()), determine
+which torque bounds are active, and compute the task residuals:
+    r_com = ||Jcom qdd* - a_com||   (weight 100)
+    r_ori = ||Jori qdd* - a_ori||   (weight  40)
+    r_pos = ||Jpos qdd* - a_pos||   (weight   1)
 
-Inversion de priorite = quand une contrainte mord, la tache de HAUTE priorite se
-degrade DAVANTAGE que la tache de basse priorite. Le test net est donc le RATIO
-r_com/r_pos sur les ticks contraints vs libres, pas r_com seul.
+Priority inversion = when a constraint bites, the HIGH-priority task degrades
+MORE than the low-priority task. The clean test is therefore the RATIO
+r_com/r_pos on constrained vs free ticks, not r_com alone.
 
-DEUX MODES, parce que la borne imposee n'est pas la borne qui lie :
-  A  bornes telles qu'implementees  : +/-300 N.m (repli, cf. Ch4 §4.4)
-  B  bornes telles que specifiees   : ctrlrange par articulation du modele
-Le mode B est aussi la mesure de ce que vaut la correction « owed » de Ch7 §7.2.
+TWO MODES, because the imposed bound is not the binding bound:
+  A  bounds as implemented  : +/-300 N.m (fallback, cf. Ch4 §4.4)
+  B  bounds as specified    : per-joint ctrlrange from the model
+Mode B also measures what the "owed" correction of Ch7 §7.2 is worth.
 
-USAGE (terminal Anaconda, depuis pal_talos/) :
-    python probe_priority_inversion.py                 # 3 seeds, modes A et B
+USAGE (Anaconda terminal, from pal_talos/):
+    python probe_priority_inversion.py                 # 3 seeds, modes A and B
     python probe_priority_inversion.py --seeds 5 --force 150
 """
 import argparse
@@ -31,12 +31,12 @@ import numpy as np
 import mujoco
 import talos_wbc as W
 
-TOL  = 1e-6         # marge d'activite d'une borne (N.m)
-ATOL = 1e-6         # marge d'activite d'une ligne d'inegalite (slack ~ 0)
+TOL  = 1e-6         # activity margin of a bound (N.m)
+ATOL = 1e-6         # activity margin of an inequality row (slack ~ 0)
 
 
 def task_residuals(m, d, wbc, qdd):
-    """Residus des trois taches ponderees, sur la MEME etat que le QP resolu."""
+    """Residuals of the three weighted tasks, on the SAME state as the solved QP."""
     nv = wbc.nv
     Jcom = np.zeros((3, nv)); mujoco.mj_jacSubtreeCom(m, d, Jcom, wbc.base)
     com = d.subtree_com[wbc.base]
@@ -67,7 +67,7 @@ def run(seed, mode, force, dur=6.0, t_push=2.0, imp=0.1):
     mujoco.mj_resetDataKeyframe(m, d, 0); mujoco.mj_forward(m, d)
     wbc = W.WBC(m, d, corners=W.CORNERS_MEASURED)
 
-    if mode == "B":                       # bornes telles que specifiees
+    if mode == "B":                       # bounds as specified
         wbc.tau_min = m.actuator_ctrlrange[:, 0].copy()
         wbc.tau_max = m.actuator_ctrlrange[:, 1].copy()
         wbc._Aineq, wbc._bineq = wbc._build_ineq()
@@ -76,14 +76,14 @@ def run(seed, mode, force, dur=6.0, t_push=2.0, imp=0.1):
         rng = np.random.default_rng(seed)
         d.qvel[:] += rng.normal(0.0, 0.01, m.nv); mujoco.mj_forward(m, d)
 
-    # -- capture de la solution REELLE du QP, sans reimplementer control() --
+    # -- capture the ACTUAL QP solution, without reimplementing control() --
     box = {}
     orig = W.solve_qp
     def spy(G, a, Aeq, beq, Aineq, bineq):
         x = orig(G, a, Aeq, beq, Aineq, bineq); box["x"] = x; return x
     W.solve_qp = spy
 
-    # indices des trois blocs d'inegalite
+    # indices of the three inequality blocks
     ncp = wbc.ncp
     uni_idx, fri_idx = [], []
     for c in range(ncp):
@@ -102,9 +102,9 @@ def run(seed, mode, force, dur=6.0, t_push=2.0, imp=0.1):
             if x is not None:
                 qdd = x[:wbc.nv]
                 r = task_residuals(m, d, wbc, qdd)
-                # activite PAR BLOC d'inegalite, lue sur la solution reelle :
-                # ordre de _build_ineq() = par point de contact [fz>=FZ_MIN, 4 x pyramide],
-                # puis 2 lignes de borne de couple par actionneur.
+                # activity PER inequality BLOCK, read off the actual solution:
+                # order of _build_ineq() = per contact point [fz>=FZ_MIN, 4 x pyramid],
+                # then 2 torque-bound rows per actuator.
                 slack = wbc._Aineq @ x - wbc._bineq
                 a_uni = int(np.sum(slack[uni_idx] < ATOL))
                 a_fri = int(np.sum(slack[fri_idx] < ATOL))
@@ -128,28 +128,28 @@ def summarise(tag, rows, upright, dev):
     act = a_uni + a_fri + a_tau
     n = len(rows); nb = int((act > 0).sum())
     print("  %-24s ticks=%d  upright=%s  dev_fin=%.1f mm" % (tag, n, upright, 1e3 * dev))
-    print("      ticks avec >=1 ligne active : unilat %5.1f %% | pyramide %5.1f %% | couple %5.1f %% | tout %5.1f %%"
+    print("      ticks with >=1 active row     : unilat %5.1f %% | pyramid  %5.1f %% | torque %5.1f %% | all  %5.1f %%"
           % (100.0*(a_uni>0).mean(), 100.0*(a_fri>0).mean(),
              100.0*(a_tau>0).mean(), 100.0*(act>0).mean()))
     if int((a_tau > 0).sum()) == 0:
-        print("      -> AUCUNE borne de couple active : le hasard d'inversion par saturation "
-              "d'actionneur n'est pas exerce.")
+        print("      -> NO torque bound active: the inversion hazard from actuator "
+              "saturation is not exercised.")
     if nb == 0:
-        print("      -> aucune inegalite active du tout.")
+        print("      -> no active inequality at all.")
         return
     free = act == 0
     bind = act > 0
     if free.sum() == 0:
-        print("      -> toutes les inegalites actives en permanence : pas de population libre "
-              "pour la comparaison.")
+        print("      -> all inequalities active throughout: no free population "
+              "for the comparison.")
         return
     for nm, v in (("r_com (w=100)", rcom), ("r_ori (w=40)", rori), ("r_pos (w=1)", rpos)):
-        print("      %-14s libre %8.3f | contraint %8.3f | x%.2f"
+        print("      %-14s free  %8.3f | bound     %8.3f | x%.2f"
               % (nm, np.median(v[free]), np.median(v[bind]),
                  np.median(v[bind]) / max(np.median(v[free]), 1e-12)))
     ratio_f = np.median(rcom[free] / np.maximum(rpos[free], 1e-12))
     ratio_b = np.median(rcom[bind] / np.maximum(rpos[bind], 1e-12))
-    print("      ratio r_com/r_pos : libre %.4f | contraint %.4f | x%.2f  <-- test d'inversion"
+    print("      ratio r_com/r_pos : free %.4f | bound %.4f | x%.2f  <-- inversion test"
           % (ratio_f, ratio_b, ratio_b / max(ratio_f, 1e-12)))
 
 
@@ -160,11 +160,11 @@ def main():
     ap.add_argument("--dur", type=float, default=4.0)
     a = ap.parse_args()
     print("=" * 78)
-    print("SONDE INVERSION DE PRIORITE — poussee laterale a t=2 s, %.0f s/essai" % a.dur)
-    print("  mode A = bornes de couple telles qu'IMPLEMENTEES (+/-300 N.m, repli)")
-    print("  mode B = bornes de couple telles que SPECIFIEES (ctrlrange par articulation)")
-    print("  enveloppe laterale S1 mesuree ~450 N ; >500 N sort du domaine (sim instable)")
-    print("  test d'inversion = ratio r_com/r_pos sur ticks contraints vs libres")
+    print("PRIORITY INVERSION PROBE — lateral push at t=2 s, %.0f s/trial" % a.dur)
+    print("  mode A = torque bounds as IMPLEMENTED (+/-300 N.m, fallback)")
+    print("  mode B = torque bounds as SPECIFIED (per-joint ctrlrange)")
+    print("  S1 lateral envelope measured ~450 N; >500 N leaves the domain (unstable sim)")
+    print("  inversion test = ratio r_com/r_pos on constrained vs free ticks")
     print("=" * 78)
     for F in a.forces:
         print("\n=== F = %.0f N ===" % F)

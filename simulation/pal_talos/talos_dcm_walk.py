@@ -1,37 +1,38 @@
 """
-TALOS — marche WBC pilotee par un planificateur DCM (capture point).
+TALOS — WBC walking driven by a DCM (capture point) planner.
 
-Architecture (standard, model-based) :
-  PLANIFICATEUR  : pas pre-planifies -> ZMP par appui -> trajectoire DCM
-                   (xi) dynamiquement faisable -> reference CoM lissee ;
-  WBC-QP         : suit (CoM, orientation, pied de balancement) sous contraintes
-                   de contact (le controleur d'equilibre deja valide).
+Architecture (standard, model-based):
+  PLANNER        : pre-planned footsteps -> ZMP per support -> dynamically
+                   feasible DCM (xi) trajectory -> smoothed CoM reference;
+  WBC-QP         : tracks (CoM, orientation, swing foot) under contact
+                   constraints (the already validated balance controller).
 
-DCM : xi = com + com_dot/omega,  omega=sqrt(g/zc).  Pour un ZMP constant par appui,
-xi(t)=zmp+(xi0-zmp)e^{omega t} ; recursion arriere sur les appuis pour xi de debut
-de chaque pas ; le CoM suit com_dot=omega(xi-com) (partie STABLE du pendule).
+DCM: xi = com + com_dot/omega,  omega=sqrt(g/zc).  For a ZMP constant per support,
+xi(t)=zmp+(xi0-zmp)e^{omega t}; backward recursion over the supports for the xi at
+the start of each step; the CoM follows com_dot=omega(xi-com) (STABLE part of the
+pendulum).
 
 HYBRID RL HOOK (2026-06): set_footstep_offset([dx,dy]) lets an external policy
 nudge the NEXT footstep target once per step (DS->SS). This edits ONLY the
 planning layer (ZMP plan + DCM recursion). The QP/WBC in control() is untouched.
 
-A placer dans pal_talos/ (a cote de talos_wbc.py).
-    python talos_dcm_walk.py            # metriques
-    python talos_dcm_walk.py --video    # rend talos_dcm_walk.mp4 (besoin talos_sim.py)
+To be placed in pal_talos/ (next to talos_wbc.py).
+    python talos_dcm_walk.py            # metrics
+    python talos_dcm_walk.py --video    # renders talos_dcm_walk.mp4 (needs talos_sim.py)
 """
 import argparse, numpy as np, mujoco
 import talos_wbc as W
 
-T_STEP = 1.3          # duree d'un appui simple (s)
-STEP_LEN = 0.10       # avance par pas (m)
+T_STEP = 1.3          # duration of one single support (s)
+STEP_LEN = 0.10       # forward progress per step (m)
 N_STEPS = 10
-SETTLE = 1.2          # transfert initial du poids (s)
-STEP_H = 0.06         # garde au sol du pied (m)
-DS_OVL = 0.33         # recouvrement double appui (transfert de poids)
+SETTLE = 1.2          # initial weight transfer (s)
+STEP_H = 0.06         # foot ground clearance (m)
+DS_OVL = 0.33         # double-support overlap (weight transfer)
 W_SWING = 6e3; KP_SW, KD_SW = 300., 35.
 KP_COM_W, KD_COM_W, W_COM_W = 260., 32., 200.
 W_POS_W = 8.0
-WIDTH_SCALE = 1.0    # multiplie l'ecartement lateral des pas (1.0 = nominal ly)
+WIDTH_SCALE = 1.0    # scales the lateral footstep separation (1.0 = nominal ly)
 
 
 class DCMWalk(W.WBC):
@@ -43,7 +44,7 @@ class DCMWalk(W.WBC):
         self.fz = p0[self.left][2]
         self.zc = float(d.subtree_com[self.base][2])
         self.omega = np.sqrt(9.81 / self.zc)
-        # --- plan de pas : suite des appuis (zmp) ---
+        # --- footstep plan: sequence of supports (zmp) ---
         self.zmp = []; self.support = []
         rx = p0[self.right][0]; lx = p0[self.left][0]
         side = self.right; ox, oy = rx, -self.ly
@@ -52,15 +53,15 @@ class DCMWalk(W.WBC):
             ox += STEP_LEN
             side = self.left if side == self.right else self.right
             oy = self.ly * WIDTH_SCALE if side == self.left else -self.ly * WIDTH_SCALE
-        # --- recursion arriere DCM : xi en debut de chaque appui ---
+        # --- backward DCM recursion: xi at the start of each support ---
         E = np.exp(self.omega * T_STEP)
         xi_ini = [None] * N_STEPS
-        xi_end = self.zmp[-1].copy()                  # capture finale sur le dernier appui
+        xi_end = self.zmp[-1].copy()                  # final capture on the last support
         for k in range(N_STEPS - 1, -1, -1):
             xi_ini[k] = self.zmp[k] + (xi_end - self.zmp[k]) / E
             xi_end = xi_ini[k]
         self.xi_ini = xi_ini
-        # etat de reference CoM (xy), demarre au centre
+        # CoM reference state (xy), starts at the centre
         self.com_ref_xy = d.subtree_com[self.base][:2].copy()
         self.t = 0.0
         self.swing_from = {self.left: p0[self.left][:3].copy(), self.right: p0[self.right][:3].copy()}
@@ -77,26 +78,26 @@ class DCMWalk(W.WBC):
         self.fb_clip = 0.05              # clamp on |DCM error| fed back (m), keeps it bounded
         self.use_foot_fb = False         # analytical capture-point foot placement (per-step)
         self.k_foot = 1.0                # capture-point gain (DCM error -> footstep shift)
-        self.foot_lat_only = False       # placement capture-point lateral seulement (anti-runaway sagittal)
-        self.use_foot_ori = False        # tache d'orientation de pied (semelle a plat)
-        self.w_foot_swing = 1500.0; self.w_foot_stance = 0.0   # stance=0 par defaut (flatten le swing seul)
+        self.foot_lat_only = False       # lateral-only capture-point placement (anti sagittal runaway)
+        self.use_foot_ori = False        # foot orientation task (sole flat)
+        self.w_foot_swing = 1500.0; self.w_foot_stance = 0.0   # stance=0 by default (flattens the swing foot only)
         self.use_cp_swing = False        # continuous: retarget swing foot toward measured capture point
         self.cp_ymax = 0.22              # max |lateral| landing of swing foot (m)
         self.foot_half = np.array([0.09, 0.05])   # support half-size x,y (m) for ZMP clamp
         self.zmp_cmd = None
         self.xi_ref = self.com_ref_xy.copy()
-        self.use_hard_contact = True   # no-slip dur sur le pied d'appui (mieux conditionne)
-        # --- soft landing (opt-in ; defauts = legacy bit-identique) — mecanismes SEPARES :
-        # sl_imp  : impedance d'orientation programmee du pied frais (souple->raide sur T_RAMP),
-        #           SANS toucher aux contraintes dures ni a FZ_MIN -> transfert de charge intact
-        # sl_ramp : transition de charge (rotation dure differee a mi-rampe + FZ_MIN rampe).
-        #           EXPERIMENTAL — desynchronise le transfert vs plan ZMP a switch instantane
-        #           (off_lat calibre pour un basculement immediat) : v1 FELL k=7, v2 FELL k=11
-        #           (oscillation periode-2 du cycle lateral). Garde pour ablation Ch6.
+        self.use_hard_contact = True   # hard no-slip on the support foot (better conditioned)
+        # --- soft landing (opt-in; defaults = bit-identical legacy) — SEPARATE mechanisms:
+        # sl_imp  : scheduled orientation impedance of the freshly landed foot (soft->stiff over T_RAMP),
+        #           WITHOUT touching the hard constraints or FZ_MIN -> load transfer intact
+        # sl_ramp : load transition (hard rotation deferred to mid-ramp + FZ_MIN ramp).
+        #           EXPERIMENTAL — desynchronises the transfer vs the instant-switch ZMP plan
+        #           (off_lat calibrated for an immediate transfer): v1 FELL k=7, v2 FELL k=11
+        #           (period-2 oscillation of the lateral cycle). Kept for the Ch6 ablation.
         self.sl_imp = False
         self.sl_ramp = False
-        self.T_RAMP = 0.06             # duree de la rampe / fenetre d'impedance (s)
-        self.land_t = {}               # instant du dernier poser, par corps de pied (rempli par la sous-classe)
+        self.T_RAMP = 0.06             # ramp duration / impedance window (s)
+        self.land_t = {}               # time of the last touchdown, per foot body (filled by the subclass)
 
     # -- external policy sets the offset for the upcoming footstep (applied at next DS->SS) --
     def set_footstep_offset(self, dxy):
@@ -130,7 +131,7 @@ class DCMWalk(W.WBC):
 
     def update(self, dt):
         self.t += dt
-        if self.t < SETTLE:                            # transfert initial vers 1er appui
+        if self.t < SETTLE:                            # initial transfer to the 1st support
             frac = min(self.t / SETTLE, 1.0)
             tgt = self.zmp[0]
             c0 = self.d.subtree_com[self.base][:2]
@@ -148,11 +149,11 @@ class DCMWalk(W.WBC):
             if self.use_foot_fb:                       # capture-point: shift next foot by DCM error
                 _, _, xi_meas = self._measured_dcm()
                 delta = self.k_foot * (xi_meas - self.xi_ini[k])
-                if self.foot_lat_only: delta[0] = 0.0  # garder l'avance sagittale nominale
+                if self.foot_lat_only: delta[0] = 0.0  # keep the nominal sagittal progress
                 self.set_footstep_offset(delta)        # clamped to OFF_MAX, no foot crossing
             self._apply_offset(k)
             self._last_k = k
-        # DCM -> CoM (integration stable)
+        # DCM -> CoM (stable integration)
         xi = self.zmp[k] + (self.xi_ini[k] - self.zmp[k]) * np.exp(self.omega * tau)
         self.xi_ref = xi.copy()
         if self.use_dcm_fb:                            # closed-loop: pull CoM ref to correct measured DCM
@@ -164,7 +165,7 @@ class DCMWalk(W.WBC):
             self.com_ref_xy = self.com_ref_xy + dt * self.omega * (xi - self.com_ref_xy)
         self.stance = self.support[k]
         self.swing = self.left if self.stance == self.right else self.right
-        # cible pied de balancement = prochain appui (zmp[k+1]) avec cloche en z
+        # swing foot target = next support (zmp[k+1]) with a bell-shaped z profile
         if k + 1 < N_STEPS:
             goal = np.array([self.zmp[k+1][0], self.zmp[k+1][1], self.fz])
         else:
@@ -180,9 +181,9 @@ class DCMWalk(W.WBC):
         frm = self.swing_from[self.swing]
         self.swing_pos = (1 - s) * frm + s * goal
         self.swing_pos = self.swing_pos.copy(); self.swing_pos[2] = self.fz + STEP_H * np.sin(np.pi * s)
-        # double appui en debut/fin de pas (recouvrement)
+        # double support at the start/end of the step (overlap)
         self.phase = "DS" if (s < DS_OVL or s > 1 - DS_OVL) else "SS"
-        if s > 1 - DS_OVL:                              # memoriser la pose au moment de poser
+        if s > 1 - DS_OVL:                              # store the pose at touchdown
             self.swing_from[self.swing] = self.swing_pos.copy()
 
     def _measured_dcm(self):
@@ -234,30 +235,30 @@ class DCMWalk(W.WBC):
         if self.phase=="SS":
             fb=self.swing; p=d.xpos[fb]; Jsw=np.zeros((3,nv)); mujoco.mj_jac(m,d,Jsw,None,p,fb)
             a_sw=KP_SW*(self.swing_pos-p)-KD_SW*(Jsw@d.qvel); add(Jsw,a_sw,W_SWING)
-        # --- soft landing : facteur de rampe post-poser par pied (1.0 = contact etabli / legacy) ---
+        # --- soft landing: post-touchdown ramp factor per foot (1.0 = contact established / legacy) ---
         ramp={fb:1.0 for fb in active}
         if self.sl_imp or self.sl_ramp:
             for fb in active:
                 ramp[fb]=float(np.clip((self.t-self.land_t.get(fb,-1e9))/max(self.T_RAMP,1e-6),0.0,1.0))
-        if self.use_foot_ori:                          # garder les semelles a plat
+        if self.use_foot_ori:                          # keep the soles flat
             if self.w_foot_stance>0:
-                for fb in active:                      # pied(s) en contact -> raidir (anti-roulis)
-                    if self.sl_imp and ramp[fb]<1.0:   # impedance programmee : souple a l'impact, sur-amortie
+                for fb in active:                      # foot/feet in contact -> stiffen (anti-roll)
+                    if self.sl_imp and ramp[fb]<1.0:   # scheduled impedance: soft at impact, over-damped
                         Jr,a_o=self.foot_ori_task(fb, W.KP_FOOT*(0.5+0.5*ramp[fb]),
                                                   W.KD_FOOT*(1.3-0.3*ramp[fb]))
                         add(Jr,a_o,max(self.w_foot_stance,300.0))
                     else:
                         Jr,a_o=self.foot_ori_task(fb); add(Jr,a_o,self.w_foot_stance)
-            if self.phase=="SS":                       # pied de balancement -> le poser a plat
+            if self.phase=="SS":                       # swing foot -> land it flat
                 Jr,a_o=self.foot_ori_task(self.swing); add(Jr,a_o,self.w_foot_swing)
         G[:nv,:nv]+=2*W.EPS_QDD*np.eye(nv); G[nv:nv+nu,nv:nv+nu]+=2*W.EPS_TAU*np.eye(nu); G[nv+nu:,nv+nu:]+=2*W.EPS_F*np.eye(nf)
         Aeq=np.zeros((nv,n)); Aeq[:,:nv]=M; Aeq[:,nv:nv+nu]=-self.S; Aeq[:,nv+nu:]=-Jc.T; beq=-h
-        if self.use_hard_contact:                      # no-slip dur sur le(s) pied(s) en contact (active seulement)
+        if self.use_hard_contact:                      # hard no-slip on the contacting foot/feet (active only)
             cr,cb=[],[]
             for fb in active:
                 Jp6=np.zeros((3,nv)); Jr6=np.zeros((3,nv)); mujoco.mj_jac(m,d,Jp6,Jr6,d.xpos[fb],fb)
-                # sl_ramp seulement : rotation en cout mou pendant la 1ere moitie de la rampe
-                # (sl_imp seul NE touche PAS aux contraintes dures -> autorite ZMP immediate)
+                # sl_ramp only: rotation as a soft cost during the 1st half of the ramp
+                # (sl_imp alone does NOT touch the hard constraints -> immediate ZMP authority)
                 Js=(Jp6,Jr6) if (not self.sl_ramp or ramp[fb]>=0.5) else (Jp6,)
                 for J in Js:
                     row=np.zeros((3,n)); row[:,:nv]=J; cr.append(row); cb.append(-W.BAUMGARTE*(J@d.qvel))
@@ -269,7 +270,7 @@ class DCMWalk(W.WBC):
         rows,lb=[],[]
         ci=0
         for fb in active:
-            fzmin=W.FZ_MIN*(ramp[fb] if self.sl_ramp else 1.0)   # rampe de charge (sl_ramp seulement)
+            fzmin=W.FZ_MIN*(ramp[fb] if self.sl_ramp else 1.0)   # load ramp (sl_ramp only)
             for _cl in self.corners_local[fb]:
                 b=nv+nu+3*ci
                 v=np.zeros(n); v[b+2]=1.; rows.append(v); lb.append(fzmin)
@@ -286,7 +287,7 @@ class DCMWalk(W.WBC):
             tau=np.array([h[dof] for dof in self.act_dofs])+W.KP_POS*(self.home-qcur)-W.KD_POS*vcur
             self._qp_fail=getattr(self,"_qp_fail",0)+1
         tau = np.clip(tau, self.tau_min, self.tau_max)
-        # --- accumulation energetique (ajout 2026-08-25, inerte) --------------
+        # --- energy accumulation (added 2026-08-25, inert) --------------------
         _dt = m.opt.timestep
         self.E_mech += abs(float(tau @ vcur)) * _dt
         self.E_sq   += float(tau @ tau) * _dt
@@ -302,17 +303,17 @@ class DCMWalk(W.WBC):
 
 
 def init_limit_cycle(c, d):
-    """Lance l'etat sur le cycle limite lateral periodique :
-    xi_s = ly*tanh(omega*T/2) ; vitesse laterale d'entree = omega*(xi_s,0 - c_y)."""
+    """Launch the state onto the periodic lateral limit cycle:
+    xi_s = ly*tanh(omega*T/2); entry lateral velocity = omega*(xi_s,0 - c_y)."""
     global SETTLE
     xi_s = c.ly * np.tanh(c.omega * T_STEP / 2.0)
-    sign0 = np.sign(c.zmp[0][1])                  # cote du 1er appui (droite = -1)
+    sign0 = np.sign(c.zmp[0][1])                  # side of the 1st support (right = -1)
     cy = float(d.subtree_com[c.base][1])
-    d.qvel[1] = c.omega * (sign0 * xi_s - cy)     # impose le DCM lateral d'entree
+    d.qvel[1] = c.omega * (sign0 * xi_s - cy)     # impose the entry lateral DCM
     c.com_ref_xy[1] = cy
     mujoco.mj_forward(c.m, d)
-    SETTLE = 0.30                                  # transfert court : deja sur le cycle
-    print("[limit-cycle] xi_s=%.4f m  vit.laterale entree=%.3f m/s" % (xi_s, d.qvel[1]))
+    SETTLE = 0.30                                  # short transfer: already on the cycle
+    print("[limit-cycle] xi_s=%.4f m  entry lateral vel=%.3f m/s" % (xi_s, d.qvel[1]))
 
 
 def main():
@@ -326,8 +327,8 @@ def main():
     ap.add_argument("--dsovl",type=float,default=None)
     ap.add_argument("--walk-cl",dest="walk_cl",action="store_true",help="preset: best closed-loop walk (fast steps + capture-point + DCM feedback)")
     ap.add_argument("--offmax",type=float,default=0.10,help="footstep offset bound (m) for capture-point")
-    ap.add_argument("--limit-cycle",dest="limit_cycle",action="store_true",help="initialise l'etat sur le cycle limite lateral")
-    ap.add_argument("--footori",dest="footori",action="store_true",help="tache d'orientation de pied (semelle a plat)")
+    ap.add_argument("--limit-cycle",dest="limit_cycle",action="store_true",help="initialise the state on the lateral limit cycle")
+    ap.add_argument("--footori",dest="footori",action="store_true",help="foot orientation task (sole flat)")
     a=ap.parse_args()
     global T_STEP, STEP_LEN, DS_OVL
     if a.walk_cl:

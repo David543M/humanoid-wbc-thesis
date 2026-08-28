@@ -1,107 +1,105 @@
 """
-lipm_mpc.py — MPC LIPM a horizon fuyant avec PLACEMENT DE PAS OPTIMISE.
+lipm_mpc.py — receding-horizon LIPM MPC with OPTIMISED FOOTSTEP PLACEMENT.
 
-Ecrit le 2026-08-11, apres centroidal_mpc.py. Formulation de Herdt et al.
-(2010), « Online walking motion generation with automatic footstep placement ».
+Written 2026-08-11, after centroidal_mpc.py. Formulation of Herdt et al.
+(2010), "Online walking motion generation with automatic footstep placement".
 
-DEPENDANCES : numpy + proxsuite. Aucun MuJoCo, aucun import des fichiers geles.
+DEPENDENCIES: numpy + proxsuite. No MuJoCo, no import of the frozen files.
 
 ===========================================================================
-POURQUOI CE FICHIER EXISTE
+WHY THIS FILE EXISTS
 ===========================================================================
-`centroidal_mpc.py` repond litteralement a « MPC centroidal » (moment lineaire
-ET angulaire, hauteur de CoM libre) mais, a pas FIXES, sa seule autorite de
-rejet est le CoP dans l'empreinte : il diverge au-dela de ~4-6 s et ne tolere
-qu'une impulsion laterale de ~50 N (mesures 2026-08-11).
+`centroidal_mpc.py` answers "centroidal MPC" literally (linear AND angular
+momentum, free CoM height) but, with FIXED footsteps, its only rejection
+authority is the CoP inside the footprint: it diverges beyond ~4-6 s and
+tolerates only a ~50 N lateral impulse (measurements 2026-08-11).
 
-Le LIPM a une propriete que le modele centroidal n'a pas : le ZMP est une
-fonction LINEAIRE de l'etat,
+The LIPM has a property the centroidal model lacks: the ZMP is a LINEAR
+function of the state,
         z = c - (zc/g) * c_ddot
-En prenant l'etat x = [c, c_dot, c_ddot] et le JERK comme commande, tout est
-lineaire ET LES AXES x ET y SE DECOUPLENT. Le QP passe de 240 variables a
-~19 PAR AXE. A ce prix, on peut ajouter les POSITIONS DE PAS comme variables
-de decision -- exactement l'adaptation qui manque au MPC centroidal.
+Taking the state x = [c, c_dot, c_ddot] and the JERK as control, everything
+is linear AND THE x AND y AXES DECOUPLE. The QP drops from 240 variables to
+~19 PER AXIS. At that price, the FOOTSTEP POSITIONS can be added as decision
+variables -- exactly the adaptation the centroidal MPC lacks.
 
-Le compromis est explicite : hauteur de CoM constante, moment cinetique nul.
-Ce planificateur ne repond donc PAS au mot « centroidal » de la question de
-recherche ; il repond a « horizon fuyant + contraintes explicites ».
+The trade-off is explicit: constant CoM height, zero angular momentum. This
+planner therefore does NOT answer the word "centroidal" in the research
+question; it answers "receding horizon + explicit constraints".
 
 ===========================================================================
-FORMULATION (par axe, horizon N, periode T)
+FORMULATION (per axis, horizon N, period T)
 ===========================================================================
     x_{k+1} = A x_k + B u_k ,  u = jerk
     A = [[1, T, T^2/2], [0, 1, T], [0, 0, 1]] ,  B = [T^3/6, T^2/2, T]^T
     z_k = C x_k ,               C = [1, 0, -zc/g]
 
-Forme condensee (matrices constantes, precalculees une fois) :
-    Z = P_zs x_0 + P_zu U        (ZMP predit)
-    V = P_vs x_0 + P_vu U        (vitesse predite)
+Condensed form (constant matrices, precomputed once):
+    Z = P_zs x_0 + P_zu U        (predicted ZMP)
+    V = P_vs x_0 + P_vu U        (predicted velocity)
 
-Variables de decision : X = [ U (N) ; F (m) ]  ->  N + m ~ 19
-    U = jerks, F = positions des m prochains pas sur cet axe.
+Decision variables: X = [ U (N) ; F (m) ]  ->  N + m ~ 19
+    U = jerks, F = positions of the next m footsteps on this axis.
 
-Cout :
-    a/2 ||U||^2                      regularisation du jerk
-  + b/2 ||V - V_ref||^2              suivi de vitesse (la consigne de marche)
-  + c/2 ||Z - Vc*f_c - Vf*F||^2      ZMP centre dans le pied porteur
-  + d/2 ||F - F_nom||^2              regularite de la foulee
+Cost:
+    a/2 ||U||^2                      jerk regularisation
+  + b/2 ||V - V_ref||^2              velocity tracking (the walking command)
+  + c/2 ||Z - Vc*f_c - Vf*F||^2      ZMP centred in the support foot
+  + d/2 ||F - F_nom||^2              stride regularity
 
-Contraintes DURES :
-  (1) ZMP dans l'empreinte :  -h <= Z - Vc*f_c - Vf*F <= h
-  (2) foulee sagittale :      |F_j - F_{j-1}| <= stride_max
-  (3) ecartement lateral :    F_j - F_{j-1} dans [+min_sep, +max_sep] ou
-                              [-max_sep, -min_sep] selon le pied -- c'est ce
-                              qui interdit le croisement de jambes.
+HARD constraints:
+  (1) ZMP in the footprint:   -h <= Z - Vc*f_c - Vf*F <= h
+  (2) sagittal stride:        |F_j - F_{j-1}| <= stride_max
+  (3) lateral separation:     F_j - F_{j-1} in [+min_sep, +max_sep] or
+                              [-max_sep, -min_sep] depending on the foot -- this
+                              is what forbids leg crossing.
 
-STATUT DU SOLVEUR lu a chaque appel (cf. audit ProxQP du 2026-08-11).
+SOLVER STATUS read at every call (cf. ProxQP audit of 2026-08-11).
 
 ===========================================================================
-RESULTATS DE VALIDATION HORS LIGNE  (2026-08-11, test_lipm_mpc.py)
+OFFLINE VALIDATION RESULTS  (2026-08-11, test_lipm_mpc.py)
 ===========================================================================
-Protocole : depart AU REPOS, sans initialisation sur le cycle limite (le MPC
-centroidal, lui, ne demarre pas sans elle). Reglage retenu : T=0.05 s, N=32.
+Protocol: start AT REST, without initialisation on the limit cycle (the
+centroidal MPC does not start without it). Retained tuning: T=0.05 s, N=32.
 
-ETABLI, ET REPRODUCTIBLE
-  * 15 pas sur 8 s SANS DIVERGENCE, depart a l'arret ; oscillation laterale
-    |y|max 62 mm (a comparer a l'ecartement ly = 85 mm) ;
-  * 100 % des QP converges, statut verifie a chaque appel ;
-  * temps de resolution DEUX AXES : 0.45 ms (0.17 ms a T=0.1 s), contre
-    4.8 ms pour le MPC centroidal -- ~19x moins cher, pour ~35 variables par
-    axe au lieu de 240 ;
-  * TOLERANCE AUX IMPULSIONS laterales, excursion post-poussee :
+ESTABLISHED, AND REPRODUCIBLE
+  * 15 steps over 8 s WITHOUT DIVERGENCE, starting from standstill; lateral
+    oscillation |y|max 62 mm (compare with the separation ly = 85 mm);
+  * 100 % of QPs converged, status checked at every call;
+  * solve time for BOTH AXES: 0.45 ms (0.17 ms at T=0.1 s), against
+    4.8 ms for the centroidal MPC -- ~19x cheaper, for ~35 variables per
+    axis instead of 240;
+  * IMPULSE TOLERANCE, lateral, post-push excursion:
         0 N -> 49 mm | 100 N -> 52 | 200 N -> 81 | 300 N -> 244 | 400 N -> 688
-    contre le MPC centroidal A PAS FIXES : 50 N absorbee, 100 N marginale,
-    150 N DIVERGENTE. L'adaptation du LIEU de pas vaut donc environ un
-    facteur 4 sur la marge de perturbation. C'est LE resultat de ce fichier.
+    against the centroidal MPC with FIXED STEPS: 50 N absorbed, 100 N
+    marginal, 150 N DIVERGENT. Adapting the step LOCATION is therefore worth
+    about a factor 4 on the disturbance margin. That is THE result of this file.
 
-NON ETABLI -- ne pas presenter comme acquis
-  * LA CONTRAINTE ZMP N'EST PAS PROPREMENT SATISFAITE. Le taux mesure de
-    « CoP dans l'empreinte » varie de 65 % a 86 % selon la maniere dont on
-    compte la phase de double appui. La definition de la mesure a change
-    trois fois au cours de la mise au point, donc CE CHIFFRE N'EST PAS
-    FIABLE et l'ecart (slack) est actif de facon non quantifiee. Un MPC dont
-    la contrainte principale n'est pas verifiee ne peut pas etre declare
-    fonctionnel.
-  * derive laterale residuelle de quelques centimetres sur 8 s ;
-  * vitesse 10-15 % au-dessus de la consigne ;
-  * PLANT = LIPM nominal + perturbation : hors poussee, le modele optimise
-    et le modele simule coincident. Validation strictement plus faible que
-    celle du MPC centroidal, qui tourne contre la dynamique centroidale non
-    lineaire exacte ;
-  * aucun couplage avec l'executeur QP-WBC (exige MuJoCo, non teste).
+NOT ESTABLISHED -- do not present as settled
+  * THE ZMP CONSTRAINT IS NOT PROPERLY SATISFIED. The measured rate of
+    "CoP inside the footprint" varies from 65 % to 86 % depending on how the
+    double-support phase is counted. The definition of the metric changed
+    three times during development, so THIS FIGURE IS NOT RELIABLE and the
+    slack is active by an unquantified amount. An MPC whose main constraint
+    is not verified cannot be declared functional.
+  * residual lateral drift of a few centimetres over 8 s;
+  * speed 10-15 % above the commanded value;
+  * PLANT = nominal LIPM + disturbance: outside the push, the optimised model
+    and the simulated model coincide. Strictly weaker validation than that of
+    the centroidal MPC, which runs against the exact nonlinear centroidal
+    dynamics;
+  * no coupling with the QP-WBC executor (requires MuJoCo, untested).
 
-HISTORIQUE DE MISE AU POINT -- cinq defauts trouves par la MESURE, aucun par
-le raisonnement : engagement du pied porteur decale d'un pas ; polygone de
-double appui trop etroit a l'amorcage ; consigne de vitesse active pendant
-l'etablissement (le CoM partait devant le pied d'appui) ; contrainte ZMP dure
-sans variable d'ecart, qui envoyait ProxQP a 10 000 iterations ; et surtout
-un PLANT incoherent avec le QP -- on contraignait z(t+T) et on simulait
-c(t) - (zc/g) c_ddot(t+T). Ce dernier point a lui seul expliquait l'essentiel
-des violations sagittales.
+DEVELOPMENT HISTORY -- five defects found by MEASUREMENT, none by reasoning:
+support-foot engagement offset by one step; double-support polygon too narrow
+at start-up; velocity command active during the settling phase (the CoM ran
+ahead of the support foot); hard ZMP constraint without a slack variable,
+which sent ProxQP to 10 000 iterations; and above all a PLANT inconsistent
+with the QP -- z(t+T) was constrained while c(t) - (zc/g) c_ddot(t+T) was
+simulated. That last point alone explained most of the sagittal violations.
 
-CONCLUSION HONNETE. Ce fichier etablit une COMPARAISON -- l'adaptativite du
-plan domine la richesse du modele dans le regime teste (marche plane, faible
-vitesse). Il n'etablit pas un marcheur.
+HONEST CONCLUSION. This file establishes a COMPARISON -- plan adaptivity
+dominates model richness in the regime tested (flat ground, low speed). It
+does not establish a walker.
 """
 import time
 import numpy as np
@@ -116,7 +114,7 @@ GRAV = 9.81
 
 
 class LIPMWalkMPC:
-    """MPC LIPM a horizon fuyant, placement de pas en variables de decision."""
+    """Receding-horizon LIPM MPC, footstep placement as decision variables."""
 
     def __init__(self, zc=0.86, T=0.1, N=16, t_step=0.5, t_settle=0.8,
                  step_len=0.08, ly=0.085,
@@ -126,7 +124,7 @@ class LIPMWalkMPC:
                  k_ypos=2.0, v_lat_max=0.15,
                  eps_abs=1e-6, max_iter=400):
         if not _HAVE_PROXQP:
-            raise SystemExit("[ABORT] proxsuite requis : pip install proxsuite")
+            raise SystemExit("[ABORT] proxsuite required: pip install proxsuite")
         self.zc, self.T, self.N = float(zc), float(T), int(N)
         self.t_step, self.t_settle = float(t_step), float(t_settle)
         self.step_len, self.ly = float(step_len), float(ly)
@@ -136,14 +134,14 @@ class LIPMWalkMPC:
         self.w = dict(jerk=w_jerk, vel=w_vel, zmp=w_zmp, step=w_step, slack=w_slack)
         self.eps_abs = eps_abs; self.max_iter = int(max_iter)
         self.k_ypos, self.v_lat_max = float(k_ypos), float(v_lat_max)
-        self.m = int(np.ceil(self.N * self.T / self.t_step)) + 1   # pas futurs vus
+        self.m = int(np.ceil(self.N * self.T / self.t_step)) + 1   # future steps seen
         self._build_prediction()
         self._qp = {}
         self.stats = dict(calls=0, solved=0, not_solved=0, statuses={}, t_ms=[])
 
     # ------------------------------------------------------------------
     def _build_prediction(self):
-        """Matrices de prediction condensees (constantes)."""
+        """Condensed prediction matrices (constant)."""
         N, T, zc = self.N, self.T, self.zc
         P_ps = np.zeros((N, 3)); P_pu = np.zeros((N, N))
         P_vs = np.zeros((N, 3)); P_vu = np.zeros((N, N))
@@ -164,13 +162,13 @@ class LIPMWalkMPC:
 
     # ------------------------------------------------------------------
     def _selectors(self, t):
-        """Qui porte a chaque echantillon de l'horizon ?
+        """Which foot supports at each sample of the horizon?
 
-        Retourne (Vc, Vf, k0, side0) :
-          Vc (N,)   1 si l'echantillon est porte par le pied ACTUEL (connu),
-          Vf (N,m)  one-hot du pas FUTUR porteur (variable de decision),
-          k0        indice du pas courant, side0 le pied porteur courant
-                    (+1 = gauche, -1 = droit).
+        Returns (Vc, Vf, k0, side0):
+          Vc (N,)   1 if the sample is supported by the CURRENT foot (known),
+          Vf (N,m)  one-hot of the FUTURE supporting step (decision variable),
+          k0        index of the current step, side0 the current support foot
+                    (+1 = left, -1 = right).
         """
         N, T = self.N, self.T
         Vc = np.zeros(N); Vf = np.zeros((N, self.m))
@@ -178,38 +176,38 @@ class LIPMWalkMPC:
         for k in range(N):
             j = self.step_index(t + (k + 1) * T)
             if j <= k0:
-                Vc[k] = 1.0                            # pied actuel, position connue
+                Vc[k] = 1.0                            # current foot, known position
             else:
-                Vf[k, min(j - k0 - 1, self.m - 1)] = 1.0   # pas futur, variable
-        # convention GaitSchedule : le pied DROIT balance aux pas pairs
-        # -> appui GAUCHE (+1) aux pas pairs, DROIT (-1) aux impairs
+                Vf[k, min(j - k0 - 1, self.m - 1)] = 1.0   # future step, variable
+        # GaitSchedule convention: the RIGHT foot swings on even steps
+        # -> LEFT support (+1) on even steps, RIGHT (-1) on odd ones
         side0 = +1.0 if (max(k0, 0) % 2 == 0) else -1.0
         return Vc, Vf, k0, side0
 
     def step_index(self, t):
-        """-1 pendant l'etablissement initial, puis 0, 1, 2, ..."""
+        """-1 during the initial settling phase, then 0, 1, 2, ..."""
         if t < self.t_settle:
             return -1
         return int((t - self.t_settle) // self.t_step)
 
     # ------------------------------------------------------------------
     def _solve_axis(self, axis, x0, Vc, Vf, f_c, F_nom, v_ref, sides, h_vec):
-        """Un QP pour un axe. X = [U (N) ; F (m)].
+        """One QP for one axis. X = [U (N) ; F (m)].
 
-        h_vec (N,) : demi-empreinte AUTORISEE au ZMP a chaque echantillon. Elle
-        n'est pas constante : pendant le double appui initial le polygone est
-        celui des DEUX pieds, nettement plus large que celui d'un pied seul.
-        Imposer l'empreinte d'un pied unique des le depart force un demarrage
-        violent et fait diverger le premier pas.
+        h_vec (N,): half-footprint ALLOWED to the ZMP at each sample. It is not
+        constant: during the initial double support the polygon is that of BOTH
+        feet, markedly wider than that of a single foot. Imposing the
+        single-foot footprint from the start forces a violent start-up and
+        makes the first step diverge.
         """
         N, m = self.N, self.m
-        n = N + m + N                        # U | F | S (ecarts sur le ZMP)
+        n = N + m + N                        # U | F | S (slacks on the ZMP)
         Pzs, Pzu, Pvs, Pvu = self.P_zs, self.P_zu, self.P_vs, self.P_vu
         Z = np.zeros((N, N))
 
-        z0 = Pzs @ x0                       # partie ZMP independante de U
+        z0 = Pzs @ x0                       # ZMP part independent of U
         v0 = Pvs @ x0
-        # --- residus lineaires ---
+        # --- linear residuals ---
         Azmp = np.hstack([Pzu, -Vf, Z])     # r_zmp = Pzu U - Vf F + (z0 - Vc f_c)
         bzmp = z0 - Vc * f_c
         Avel = np.hstack([Pvu, np.zeros((N, m)), Z])
@@ -230,13 +228,13 @@ class LIPMWalkMPC:
              + w["step"] * Astep.T @ bstep)
         H = 0.5 * (H + H.T) + 1e-9 * np.eye(n)
 
-        # --- contraintes ---
+        # --- constraints ---
         rows, lo, up = [], [], []
-        # (1) ZMP dans l'empreinte, RELACHEE par un ecart s_k >= 0 fortement penalise.
-        #     Un MPC a contraintes ZMP DURES et duree de pas figee devient
-        #     infaisable des qu'une perturbation depasse l'autorite du CoP : le
-        #     solveur part alors a la limite d'iterations. L'ecart rend le QP
-        #     toujours faisable et rend la violation MESURABLE au lieu de fatale.
+        # (1) ZMP in the footprint, RELAXED by a heavily penalised slack s_k >= 0.
+        #     An MPC with HARD ZMP constraints and a frozen step duration becomes
+        #     infeasible as soon as a disturbance exceeds the CoP authority: the
+        #     solver then runs to the iteration limit. The slack keeps the QP
+        #     always feasible and makes the violation MEASURABLE instead of fatal.
         for k in range(N):
             a = Azmp[k].copy(); a[N + m + k] = -1.0        # ... - s_k <= h
             rows.append(a); lo.append(-1e20); up.append(h_vec[k] - bzmp[k])
@@ -244,9 +242,9 @@ class LIPMWalkMPC:
             rows.append(b); lo.append(-1e20); up.append(h_vec[k] + bzmp[k])
             c = np.zeros(n); c[N + m + k] = 1.0            # s_k >= 0
             rows.append(c); lo.append(0.0); up.append(1e20)
-        # (2) foulee sagittale / (3) ecartement lateral, entre pas consecutifs.
-        # La ligne exprime  F_j - F_{j-1}  (ou F_0 - f_c pour j = 0) ; le terme
-        # constant f_c passe donc au second membre pour j = 0 uniquement.
+        # (2) sagittal stride / (3) lateral separation, between consecutive steps.
+        # The row expresses  F_j - F_{j-1}  (or F_0 - f_c for j = 0); the constant
+        # term f_c therefore moves to the right-hand side for j = 0 only.
         for j in range(m):
             r = np.zeros(n); r[N + j] = 1.0
             offset = f_c if j == 0 else 0.0
@@ -255,9 +253,9 @@ class LIPMWalkMPC:
             if axis == "x":
                 d_lo, d_hi = -self.stride_max, +self.stride_max
             else:
-                s = sides[j]                     # pied qui se pose : +1 gauche, -1 droit
+                s = sides[j]                     # landing foot: +1 left, -1 right
                 d_lo, d_hi = (s * self.min_sep, s * self.max_sep)
-                if s < 0:                        # ordonner les bornes
+                if s < 0:                        # order the bounds
                     d_lo, d_hi = d_hi, d_lo
             rows.append(r); lo.append(offset + d_lo); up.append(offset + d_hi)
         C = np.vstack(rows); l = np.array(lo); u = np.array(up)
@@ -280,27 +278,27 @@ class LIPMWalkMPC:
 
     # ------------------------------------------------------------------
     def solve(self, xs, ys, t, foot_c):
-        """xs, ys : etats [c, c_dot, c_ddot]. foot_c : (fx, fy) du pied porteur.
+        """xs, ys: states [c, c_dot, c_ddot]. foot_c: (fx, fy) of the support foot.
 
-        Retourne dict(jerk, footsteps, zmp_pred, status, solve_ms).
+        Returns dict(jerk, footsteps, zmp_pred, status, solve_ms).
         """
         Vc, Vf, k0, side0 = self._selectors(t)
-        # plan nominal des m prochains pas
+        # nominal plan for the next m steps
         Fx_nom, Fy_nom, sides = [], [], []
         for j in range(self.m):
             Fx_nom.append(foot_c[0] + (j + 1) * self.step_len)
-            s = -side0 if (j % 2 == 0) else side0      # alternance stricte
+            s = -side0 if (j % 2 == 0) else side0      # strict alternation
             sides.append(s)
             Fy_nom.append(s * self.ly)
         Fx_nom = np.array(Fx_nom); Fy_nom = np.array(Fy_nom)
 
-        # demi-empreinte par echantillon : polygone des DEUX pieds tant que
-        # l'echantillon tombe dans le double appui initial
-        # Echantillons en DOUBLE APPUI : etablissement initial, ET debut de
-        # chaque pas (recouvrement ds_ratio, comme le marcheur S2). Sans cette
-        # phase, le ZMP devrait sauter d'un pied a l'autre en passant par le
-        # milieu, qui n'appartient a aucune des deux empreintes : violation
-        # laterale structurelle a chaque transition (mesure : 19 % des ticks).
+        # half-footprint per sample: polygon of BOTH feet as long as the
+        # sample falls inside the initial double support
+        # DOUBLE-SUPPORT samples: initial settling, AND the start of each step
+        # (ds_ratio overlap, like the S2 walker). Without this phase the ZMP
+        # would have to jump from one foot to the other through the midpoint,
+        # which belongs to neither footprint: a structural lateral violation at
+        # every transition (measured: 19 % of ticks).
         def _is_ds(tt):
             if tt < self.t_settle:
                 return 1.0
@@ -310,18 +308,18 @@ class LIPMWalkMPC:
         hx_vec = self.foot_h["x"] * np.ones(self.N)
         hy_vec = self.foot_h["y"] + in_ds * self.ly
 
-        # Consigne de vitesse NULLE pendant l'etablissement : commander la
-        # vitesse de croisiere des t=0 fait partir le CoM en avant du pied
-        # d'appui avant le premier pas ; le ZMP sature alors a l'avant de
-        # l'empreinte et le marcheur tombe vers l'avant en foulees maximales.
+        # ZERO velocity command during settling: commanding the cruise speed
+        # from t=0 sends the CoM ahead of the support foot before the first
+        # step; the ZMP then saturates at the front of the footprint and the
+        # walker falls forward taking maximum strides.
         v_ref_x = (self.step_len / self.t_step) * (1.0 - in_ds)
         Xx, stx, msx = self._solve_axis("x", xs, Vc, Vf, foot_c[0], Fx_nom,
                                         v_ref_x, sides, hx_vec)
-        # Boucle externe de POSITION laterale. Un MPC de Herdt suit une VITESSE ;
-        # une consigne laterale nulle est satisfaite par n'importe quel decalage
-        # constant, et la marche derive alors en diagonale (mesure : -0.08 a
-        # -0.23 m sur 8 s, insensible a w_step). On referme donc la position par
-        # un terme proportionnel, saturé pour ne jamais dominer le cycle lateral.
+        # Outer lateral POSITION loop. A Herdt MPC tracks a VELOCITY; a zero
+        # lateral command is satisfied by any constant offset, and the gait then
+        # drifts diagonally (measured: -0.08 to -0.23 m over 8 s, insensitive to
+        # w_step). Position is therefore closed by a proportional term,
+        # saturated so it never dominates the lateral cycle.
         v_ref_y = float(np.clip(-self.k_ypos * ys[0], -self.v_lat_max, self.v_lat_max))
         Xy, sty, msy = self._solve_axis("y", ys, Vc, Vf, foot_c[1], Fy_nom,
                                         v_ref_y, sides, hy_vec)
@@ -344,9 +342,9 @@ class LIPMWalkMPC:
     def report(self):
         s = self.stats
         t = np.array(s["t_ms"]) if s["t_ms"] else np.array([np.nan])
-        return ("LIPM-MPC : %d appels | %d resolus | %d NON resolus\n"
+        return ("LIPM-MPC: %d calls | %d solved | %d NOT solved\n"
                 "           solve (2 axes) mean %.3f ms | p99 %.3f ms | max %.3f ms\n"
-                "           statuts %s"
+                "           statuses %s"
                 % (s["calls"], s["solved"], s["not_solved"],
                    np.nanmean(t), np.nanpercentile(t, 99), np.nanmax(t),
                    s["statuses"]))

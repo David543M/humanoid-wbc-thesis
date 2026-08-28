@@ -82,93 +82,92 @@ what the learning layer must add.
 
 ```bash
 python talos_dcm_walk.py                 # open-loop baseline (falls ~3 steps)
-python talos_dcm_walk.py --walk-cl       # closed-loop preset (~4 pas propres)
+python talos_dcm_walk.py --walk-cl       # closed-loop preset (~4 clean steps)
 python talos_dcm_walk.py --feedback --footfb --cpswing --tstep 0.5 --dsovl 0.45   # explicit
-python view_talos_dcm.py --walk-cl       # watch it in the 3D viewer (your machine)
+python view_talos_dcm.py --walk-cl       # watch it in the 3D viewer
 ```
 
 ---
 
-## 6. Synthèse du cycle limite latéral (investigation poussée)
+## 6. Lateral limit-cycle synthesis (extended investigation)
 
-**Théorie.** Pour une marche latérale périodique (appuis alternés à ±ly, durée T), le
-DCM latéral admet un point fixe analytique ξ_s = ly·tanh(ωT/2). On a vérifié
-numériquement que la **récursion arrière du planner converge exactement vers ce point
-fixe** — donc le plan est déjà sur le cycle limite pour les pas centraux ; le défaut
-n'est pas le plan mais l'**état initial** (robot centré, vitesse nulle, hors cycle).
+**Theory.** For a periodic lateral gait (alternating supports at ±ly, duration T), the
+lateral DCM admits an analytic fixed point ξ_s = ly·tanh(ωT/2). It was verified
+numerically that the **planner's backward recursion converges exactly to that fixed
+point** — so the plan is already on the limit cycle for the central steps; the defect is
+not the plan but the **initial state** (robot centred, zero velocity, off the cycle).
 
-**Entrée impulsionnelle : échec instructif.** Imposer la vitesse latérale d'entrée
-théorique (ċ_y = ω·ξ_s ≈ 0.18 m/s via `d.qvel`) **dégrade** le résultat (chute à 2.6 s
-contre 4.08 s) : les pieds sont en contact (chaîne cinématique fermée), donc injecter
-une vitesse de base ne produit pas une translation propre du CoM — le robot est projeté
-latéralement (excursion 0.42 m contre 0.22 m). Conservé en option `--limit-cycle`, mais
-désactivé par défaut.
+**Impulsive entry: an instructive failure.** Imposing the theoretical lateral entry
+velocity (ċ_y = ω·ξ_s ≈ 0.18 m/s via `d.qvel`) **degrades** the result (fall at 2.6 s
+against 4.08 s): the feet are in contact (closed kinematic chain), so injecting a base
+velocity does not produce a clean CoM translation — the robot is thrown laterally
+(excursion 0.42 m against 0.22 m). Kept as the `--limit-cycle` option, but disabled by
+default.
 
-**Résultat positif majeur.** La rétroaction closed-loop (`--walk-cl`) **résout
-l'instabilité latérale d'origine** : sur les pas 1–4 le CoM latéral reste à ±0.05 m
-(contre 0.65 m en boucle ouverte) et le roll à ±0.05 rad (contre 1.5). Le mode d'échec
-latéral du §1 est éliminé.
+**Major positive result.** The closed-loop feedback (`--walk-cl`) **resolves the original
+lateral instability**: over steps 1–4 the lateral CoM stays within ±0.05 m (against
+0.65 m open-loop) and the roll within ±0.05 rad (against 1.5). The lateral failure mode
+of §1 is eliminated.
 
-**Le goulot a migré vers le sagittal.** Le robot tient désormais latéralement puis
-**bascule vers l'avant** (pitch 0.08→0.65→1.20 rad, CoM_x accélérant 0.3→0.7→1.0 m) vers
-le pas 5–6 : une divergence sagittale (emballement avant). Restreindre le placement de
-pied au latéral seul ne la corrige pas. Plafond honnête : **~4 pas propres, latéral résolu,
-sagittal devenu limitant.**
+**The bottleneck has migrated to the sagittal channel.** The robot now holds laterally
+and then **tips forward** (pitch 0.08→0.65→1.20 rad, CoM_x accelerating 0.3→0.7→1.0 m)
+around step 5–6: a sagittal divergence (forward runaway). Restricting foot placement to
+the lateral channel alone does not correct it. Honest ceiling: **~4 clean steps, lateral
+resolved, sagittal now limiting.**
 
-*Critical insight.* Le déplacement du mode d'échec (latéral → sagittal) est le résultat
-le plus significatif de cette phase : il prouve que la rétroaction capture-point latérale
-fonctionne et isole le verrou suivant. Une marche soutenue en pur model-based demande
-maintenant trois briques additionnelles — une **entrée par bercement latéral** progressif
-(et non impulsionnel, à cause de la chaîne fermée), une **régulation sagittale** de la
-vitesse/du tangage, et un **timing de pas adaptatif** — c'est-à-dire une synthèse de
-démarche complète. Chaque brique est un incrément ciblé, désormais clairement défini par
-ce diagnostic plutôt que deviné.
+*Critical insight.* The migration of the failure mode (lateral → sagittal) is the most
+significant result of this phase: it proves the lateral capture-point feedback works and
+isolates the next obstacle. Sustained purely model-based walking now demands three
+further components — a **progressive lateral rocking entry** (rather than an impulsive
+one, because of the closed chain), a **sagittal regulation** of forward velocity and
+pitch, and an **adaptive step timing** — that is, a complete gait synthesis. Each
+component is a targeted increment, now clearly defined by this diagnosis rather than
+guessed at.
 
 ---
 
-## 7. Verrou sagittal : diagnostic et plafond architectural
+## 7. Sagittal obstacle: diagnosis and architectural ceiling
 
-Une fois le latéral résolu (§6), le mode d'échec devient un **emballement avant**.
-La trace sagittale le localise précisément : le DCM avant suit le plan jusqu'au pas 3
-(t≈2.85 s : dcm_x = 0.130 ≈ ref 0.135), puis la **vitesse d'avance dérive**
-(0.10 → 0.15 → 0.19 → 0.27 m/s sur les pas 3–4), l'erreur de DCM dépasse l'écrêtage
-de la rétroaction (0.05 m), et le DCM avant diverge exponentiellement (v atteint
-1.5 m/s, tangage 0.08 → 1.20 rad). Mécanisme : le CoM avance ~0.13 m/pas alors que les
-pieds n'avancent que de STEP_LEN = 0.05 m — **le CoM dépasse son support** et bascule.
+Once the lateral channel is resolved (§6), the failure mode becomes a **forward
+runaway**. The sagittal trace localises it precisely: the forward DCM follows the plan
+until step 3 (t≈2.85 s: dcm_x = 0.130 ≈ ref 0.135), then the **forward velocity drifts**
+(0.10 → 0.15 → 0.19 → 0.27 m/s over steps 3–4), the DCM error exceeds the feedback
+clipping (0.05 m), and the forward DCM diverges exponentially (v reaches 1.5 m/s, pitch
+0.08 → 1.20 rad). Mechanism: the CoM advances ~0.13 m per step while the feet advance
+only by STEP_LEN = 0.05 m — **the CoM outruns its support** and tips over.
 
-**Le plafond est robuste à tout réglage.** Testé exhaustivement, *toutes* les variantes
-donnent ~4 pas propres (≤6 en métrique temporelle lenient ; voir note) :
+**The ceiling is robust to any tuning.** Tested exhaustively, *every* variant gives
+~4 clean steps (≤6 under the lenient time-based metric; see the note):
 
-| Intervention | Pas (métrique temporelle, lenient) |
+| Intervention | Steps (lenient time-based metric) |
 |---|---|
-| walk-cl (référence) | 6 |
-| rétroaction DCM forte (clip 0.20, k=2) | 4 |
-| placement de pied latéral seul | 5 |
-| amortissement CoM ×2.5 (freinage) | 4 |
-| DCM-feedback OFF | 6 |
-| foot-placement OFF | 6 |
+| walk-cl (reference) | 6 |
+| strong DCM feedback (clip 0.20, k=2) | 4 |
+| lateral foot placement only | 5 |
+| CoM damping ×2.5 (braking) | 4 |
+| DCM feedback OFF | 6 |
+| foot placement OFF | 6 |
 
-Aucun gain, écrêtage, amortissement ou composante de rétroaction ne dépasse ce plafond.
+No gain, clipping, damping or feedback component exceeds this ceiling.
 
-> **Note métrique (corrigée).** Les chiffres du tableau utilisent une métrique *lenient*
-> (transitions de phase basées sur le temps, qui continuent pendant la chute). La métrique
-> *honnête* — **pas propres** = pas complétés en restant stable (z>0.95, |roulis|,|tangage|<0.2 rad) —
-> donne ~2 de moins : le walk-cl fait **~4 pas propres** (1ère perte d'équilibre à t≈3.5 s),
-> contre ~2 pour le baseline. Le balayage paramétrique a été relancé avec cette métrique
-> (`runs/sweep3/`, `debug_probe.py` champ `pas PROPRES`).
+> **Metric note (corrected).** The figures in the table use a *lenient* metric (time-based
+> phase transitions, which keep advancing during the fall). The *honest* metric —
+> **clean steps** = steps completed while remaining stable (z>0.95, |roll|,|pitch|<0.2 rad) —
+> gives about two fewer: walk-cl achieves **~4 clean steps** (first loss of balance at
+> t≈3.5 s), against ~2 for the baseline. The parameter sweep was re-run with this metric
+> (`runs/sweep3/`, `debug_probe.py` field `CLEAN steps`).
 
-*Critical insight.* L'invariance du plafond à travers tout l'espace des gains est le
-résultat décisif : elle prouve que le verrou n'est pas paramétrique mais **structurel**,
-imposé par la décision *une-fois-par-pas à timing fixe* et par une longueur de pas fixe
-incompatible avec la vitesse que la dynamique du pendule génère. Réguler la vitesse
-d'avance par la cheville/CoM seule est impossible une fois le DCM avant au-delà de
-l'orteil (limite de contrôlabilité, l'exacte analogie sagittale du §1 latéral).
+*Critical insight.* The invariance of the ceiling across the whole gain space is the
+decisive result: it proves the obstacle is not parametric but **structural**, imposed by
+the *once-per-step, fixed-timing* decision and by a fixed step length incompatible with
+the velocity the pendulum dynamics generates. Regulating forward velocity through the
+ankle and CoM alone is impossible once the forward DCM is past the toe (a controllability
+limit, the exact sagittal analogue of the lateral case in §1).
 
-**Le seul levier restant est le timing de pas adaptatif.** Pour que le CoM ne dépasse
-pas son support, il faut **poser le pied plus tôt** quand le DCM avant approche le bord
-de l'orteil (déclenchement événementiel du contact, et non à T_STEP fixe), couplé au
-placement capture-point déjà en place. C'est un changement structurel du planificateur
-(la logique de phase passe du temps à un événement DCM-seuil), pas un réglage — et c'est
-la brique qui peut casser le plafond de ~4 pas propres en pur model-based. À défaut, c'est
-exactement la décision haut-niveau (placement + timing) que la couche RbL est conçue
-pour fournir.
+**The only remaining lever is adaptive step timing.** To stop the CoM outrunning its
+support, the foot must be **placed earlier** when the forward DCM approaches the toe edge
+(event-triggered contact rather than a fixed T_STEP), coupled with the capture-point
+placement already in place. That is a structural change to the planner (phase logic moves
+from time to a DCM-threshold event), not a tuning — and it is the component that can break
+the ~4 clean-step ceiling in a purely model-based setting. Failing that, it is exactly the
+high-level decision (placement + timing) that the learning layer is designed to supply.

@@ -1,23 +1,23 @@
 """
-test_lipm_mpc.py — validation hors ligne du LIPM-MPC a placement de pas.
+test_lipm_mpc.py — offline validation of the footstep-placement LIPM-MPC.
 
-BOUCLE FERMEE PHYSIQUE (et non tautologique) :
-    le MPC produit un JERK -> une acceleration commandee -> un CoP commande
+PHYSICAL (not tautological) CLOSED LOOP:
+    the MPC produces a JERK -> a commanded acceleration -> a commanded CoP
         z_cmd = c - (zc/g) * c_ddot_cmd
-    le PLANT est le pendule inverse pilote par ce CoP :
-        c_ddot_reel = omega^2 (c - z_cmd) + F_ext/m
-Sans perturbation les deux coincident ; sous impulsion, l'ecart est reel et le
-MPC doit le rattraper par le retour d'etat ET par le deplacement des pas.
+    the PLANT is the inverted pendulum driven by that CoP:
+        c_ddot_real = omega^2 (c - z_cmd) + F_ext/m
+Without disturbance the two coincide; under an impulse the discrepancy is real
+and the MPC must recover through state feedback AND footstep displacement.
 
-CE QUI EST TESTE  : formulation du QP, satisfaction du CoP dans l'empreinte,
-                    adaptation du lieu de pas, rejet de perturbation, temps.
-CE QUI NE L'EST PAS: hauteur de CoM variable, moment cinetique (hors modele),
-                     couplage avec l'executeur QP-WBC (exige MuJoCo).
+WHAT IS TESTED   : QP formulation, CoP satisfaction inside the footprint,
+                   footstep-location adaptation, disturbance rejection, timing.
+WHAT IS NOT      : variable CoM height, angular momentum (outside the model),
+                   coupling with the QP-WBC executor (requires MuJoCo).
 
 USAGE
-    python test_lipm_mpc.py                    # nominal, depart AU REPOS
-    python test_lipm_mpc.py --push 150         # impulsion laterale
-    python test_lipm_mpc.py --compare          # balayage d'impulsions
+    python test_lipm_mpc.py                    # nominal, start AT REST
+    python test_lipm_mpc.py --push 150         # lateral impulse
+    python test_lipm_mpc.py --compare          # impulse sweep
 """
 import argparse
 import numpy as np
@@ -33,12 +33,12 @@ def run(duration=10.0, dt_sim=0.002, push_N=0.0, push_t=4.0, push_dur=0.1,
                       step_len=0.08, ly=0.085)
     omega2 = GRAV / ZC
 
-    # --- DEPART AU REPOS : aucune initialisation sur le cycle limite ---
-    xs = np.zeros(3)                    # [c, c_dot, c_ddot] axe x
-    ys = np.zeros(3)                    # axe y
-    # Pendant l'etablissement, on vise deja le pied qui portera le pas 0 :
-    # le cout de centrage du ZMP realise ainsi le TRANSFERT DE POIDS lateral
-    # avant le decollage, au lieu de laisser le CoM au milieu.
+    # --- START AT REST: no initialisation on the limit cycle ---
+    xs = np.zeros(3)                    # [c, c_dot, c_ddot] x axis
+    ys = np.zeros(3)                    # y axis
+    # During settling, the foot that will support step 0 is already targeted:
+    # the ZMP centring cost thereby performs the lateral WEIGHT TRANSFER before
+    # lift-off, instead of leaving the CoM in the middle.
     foot_c = np.array([0.0, +0.085])
     k_prev = mpc.step_index(0.0)
     z_cmd = np.zeros(2)
@@ -51,21 +51,21 @@ def run(duration=10.0, dt_sim=0.002, push_N=0.0, push_t=4.0, push_dur=0.1,
     for _ in range(n):
         k = mpc.step_index(t)
         if k > k_prev:
-            # Commit du pied porteur. ATTENTION a l'amorcage : lors de la
-            # transition etablissement -> pas 0, AUCUN pied ne se pose. Le
-            # porteur du pas 0 est le pied GAUCHE, deja au sol (le pied droit
-            # balance aux pas pairs, convention GaitSchedule). Les pas suivants
-            # prennent bien le premier pas planifie, qui vient de se poser.
+            # Commit of the support foot. CAREFUL at start-up: at the
+            # settling -> step 0 transition, NO foot lands. The support of
+            # step 0 is the LEFT foot, already on the ground (the right foot
+            # swings on even steps, GaitSchedule convention). Later steps do
+            # take the first planned footstep, which has just landed.
             if k == 0:
                 foot_c = np.array([0.0, +mpc.ly])
             elif plan is not None:
                 foot_c = plan[0].copy()
             k_prev = k
             log["steps"].append((t, foot_c.copy()))
-            next_mpc = t          # RE-RESOLUTION FORCEE au changement d'appui :
-            # sans cela le bloqueur d'ordre zero maintient jusqu'a T un ZMP
-            # calcule pour le pied PRECEDENT, compare ensuite au nouveau pied
-            # -> ~T/t_step = 20 % de faux « hors empreinte ».
+            next_mpc = t          # FORCED RE-SOLVE at the support change:
+            # without it the zero-order hold keeps, for up to T, a ZMP computed
+            # for the PREVIOUS foot, then compared against the new foot
+            # -> ~T/t_step = 20 % of spurious "outside footprint".
 
         if t >= next_mpc - 1e-12:
             out = mpc.solve(xs, ys, t, foot_c)
@@ -73,34 +73,34 @@ def run(duration=10.0, dt_sim=0.002, push_N=0.0, push_t=4.0, push_dur=0.1,
             jerk = out["jerk"]
             next_mpc = t + T
 
-        # PLANT : triple integrateur pilote par le JERK du MPC -- exactement le
-        # modele que le QP optimise. Le ZMP realise s'en deduit :
+        # PLANT: triple integrator driven by the MPC JERK -- exactly the model
+        # the QP optimises. The realised ZMP follows from it:
         #     z = c - (zc/g) * c_ddot
-        # evalue sur le MEME instant que la position, ce qui est la grandeur
-        # que la contrainte du QP borne. (Une version anterieure melangeait
-        # c(t) et c_ddot(t+T) : on contraignait une grandeur et on en simulait
-        # une autre, d'ou 33 % de fausses violations.)
+        # evaluated at the SAME instant as the position, which is the quantity
+        # the QP constraint bounds. (An earlier version mixed c(t) and
+        # c_ddot(t+T): one quantity was constrained while another was
+        # simulated, hence 33 % of spurious violations.)
         c = np.array([xs[0], ys[0]])
         acc = np.array([xs[2], ys[2]])
         z_cmd = c - (ZC / GRAV) * acc
 
-        # empreinte du pied porteur (pendant l'etablissement : double appui, plus large)
+        # support-foot footprint (during settling: double support, wider)
         hx, hy = mpc.foot_h["x"], mpc.foot_h["y"]
         ph = 1.0 if k < 0 else ((t - mpc.t_settle) % mpc.t_step) / mpc.t_step
-        if k < 0 or ph < mpc.ds_ratio:          # double appui : polygone elargi
+        if k < 0 or ph < mpc.ds_ratio:          # double support: widened polygon
             hy = hy + mpc.ly
         inbox = bool(abs(z_cmd[0] - foot_c[0]) <= hx + 1e-6 and
                      abs(z_cmd[1] - foot_c[1]) <= hy + 1e-6)
         log["t"].append(t); log["c"].append(c.copy()); log["z"].append(z_cmd.copy())
         log["foot"].append(foot_c.copy()); log["inbox"].append(inbox)
 
-        # --- integration exacte du triple integrateur sous jerk constant ---
+        # --- exact integration of the triple integrator under constant jerk ---
         j2 = jerk if plan is not None else np.zeros(2)
         for s_ax, ju in ((xs, j2[0]), (ys, j2[1])):
             s_ax[0] += s_ax[1] * dt_sim + 0.5 * s_ax[2] * dt_sim**2 + ju * dt_sim**3 / 6.0
             s_ax[1] += s_ax[2] * dt_sim + 0.5 * ju * dt_sim**2
             s_ax[2] += ju * dt_sim
-        if push_N and push_t <= t < push_t + push_dur:      # perturbation exogene
+        if push_N and push_t <= t < push_t + push_dur:      # exogenous disturbance
             idx = push_axis
             (xs if idx == 0 else ys)[2] += (push_N / MASS) * dt_sim / push_dur
         t += dt_sim
@@ -128,34 +128,34 @@ def main():
 
     if a.compare:
         print("=" * 78)
-        print("TOLERANCE AUX IMPULSIONS — LIPM-MPC (pas adaptatifs) vs")
-        print("MPC centroidal a pas FIXES (mesures 2026-08-11 : 50 N ok, 100 N")
-        print("marginal, 150 N divergent)")
+        print("IMPULSE TOLERANCE — LIPM-MPC (adaptive footsteps) vs")
+        print("centroidal MPC with FIXED footsteps (measurements 2026-08-11: 50 N ok,")
+        print("100 N marginal, 150 N divergent)")
         print("=" * 78)
         print("%-10s %-8s %-11s %-10s %-9s %s"
-              % ("push N", "t_end s", "diverge", "|y|max mm", "CoP ok", "pas"))
+              % ("push N", "t_end s", "diverged", "|y|max mm", "CoP ok", "steps"))
         for p in (0.0, 50.0, 100.0, 150.0, 200.0, 300.0):
             r = run(duration=10.0, push_N=p)
             print("%-10.0f %-8.2f %-11s %-10.1f %-9.1f%% %d"
-                  % (p, r["t_end"], "OUI" if r["diverged"] else "non",
+                  % (p, r["t_end"], "YES" if r["diverged"] else "no",
                      r["y_max"] * 1e3, 100 * r["inbox"], r["n_steps"]))
         return
 
     print("=" * 78)
-    print("LIPM-MPC a placement de pas — DEPART AU REPOS (aucune initialisation")
-    print("sur le cycle limite, contrairement au MPC centroidal)")
+    print("Footstep-placement LIPM-MPC — START AT REST (no initialisation on")
+    print("the limit cycle, unlike the centroidal MPC)")
     print("=" * 78)
     r = run(duration=a.dur, push_N=a.push, verbose=True)
     print(r["mpc"].report())
     print("-" * 78)
-    print("  duree simulee    : %.2f s / %.1f s demandees  -> %s"
+    print("  simulated time   : %.2f s / %.1f s requested  -> %s"
           % (r["t_end"], a.dur, "DIVERGENCE" if r["diverged"] else "stable"))
-    print("  progression      : %.2f m en %d pas" % (r["dist"], r["n_steps"]))
-    print("  oscillation lat. : |y|max %.1f mm" % (r["y_max"] * 1e3))
-    print("  CoP dans le pied : %.1f %% des pas de temps" % (100 * r["inbox"]))
+    print("  progression      : %.2f m in %d steps" % (r["dist"], r["n_steps"]))
+    print("  lateral oscill.  : |y|max %.1f mm" % (r["y_max"] * 1e3))
+    print("  CoP inside foot  : %.1f %% of time steps" % (100 * r["inbox"]))
     print("=" * 78)
     ok = (not r["diverged"]) and r["inbox"] > 0.99 and r["mpc"].stats["not_solved"] == 0
-    print("VERDICT : %s" % ("OK" if ok else "A INVESTIGUER"))
+    print("VERDICT: %s" % ("OK" if ok else "TO INVESTIGATE"))
 
 
 if __name__ == "__main__":
