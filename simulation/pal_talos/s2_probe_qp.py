@@ -1,38 +1,38 @@
 """
-S2 — Probe root-cause du non-determinisme par seed (P1e).
+S2 — Root-cause probe for the per-seed non-determinism (P1e).
 
-Chaine d'indices (de s2_determinism.py) :
-  - condition initiale reproductible (`--seed` -> default_rng -> bruit qvel, tirage unique)
-    => ticks 0-47 bit-identiques entre runs du meme seed ;
-  - divergence injectee ~tick 50, i.e. a l'ENGAGEMENT du QP-WBC ;
-  - le mono-thread (OMP/MKL=1) ne corrige PAS -> pas (que) le BLAS multi-thread.
+Chain of evidence (from s2_determinism.py):
+  - reproducible initial condition (`--seed` -> default_rng -> qvel noise, single draw)
+    => ticks 0-47 bit-identical between runs of the same seed;
+  - divergence injected ~tick 50, i.e. at the ENGAGEMENT of the QP-WBC;
+  - single-threading (OMP/MKL=1) does NOT fix it -> not (only) the multi-threaded BLAS.
 
-SUSPECT PRINCIPAL : un buffer `np.empty` NON-INITIALISE dans l'assemblage du QP
-(H/g/A pre-alloues une fois, dimension effective variable avec le nombre de
-contacts 4-8 -> les entrees inutilisees contiennent du garbage tas qui varie
-d'un process a l'autre et nourrit ProxQP -> solutions differentes).
+PRIME SUSPECT: an UNINITIALISED `np.empty` buffer in the QP assembly
+(H/g/A pre-allocated once, effective dimension varying with the number of
+contacts 4-8 -> the unused entries hold heap garbage that varies
+from one process to the next and feeds ProxQP -> different solutions).
 
-TEST (decisif) — 2 modes, meme seed, en SOUS-PROCESSUS :
-  1. PLAIN     : walker tel quel, 2 runs        -> attendu : DIVERGENT (reproduit le bug)
-  2. ZEROEMPTY : walker avec np.empty/np.empty_like forces a zero-fill (niveau
-                 Python), 2 runs                -> si IDENTIQUE : cause = memoire
-                 non-initialisee cote Python ; FIX = zero-init des buffers dans
-                 talos_wbc.py (remplacer np.empty par np.zeros aux pre-allocations).
+TEST (decisive) — 2 modes, same seed, in SUBPROCESSES:
+  1. PLAIN     : walker as-is, 2 runs          -> expected: DIVERGENT (reproduces the bug)
+  2. ZEROEMPTY : walker with np.empty/np.empty_like forced to zero-fill (Python
+                 level), 2 runs                -> if IDENTICAL: cause = uninitialised
+                 memory on the Python side; FIX = zero-init the buffers in
+                 talos_wbc.py (replace np.empty with np.zeros at the pre-allocations).
 
-Signature de comparaison = trajectoire com_err (bit-a-bit).
+Comparison signature = com_err trajectory (bit-for-bit).
 
-Lecture du verdict :
-  - PLAIN divergent + ZEROEMPTY identique -> ROOT CAUSE CONFIRMEE (np.empty).
-  - PLAIN divergent + ZEROEMPTY divergent -> l'entropie est cote C-extension
-    (proxsuite / mujoco / pinocchio), pas un np.empty Python -> etape suivante :
-    capturer les matrices reelles du QP au tick ~50 et tester ProxQP dessus,
-    ou activer les flags de determinisme du solveur.
-  - PLAIN identique -> pas reproduit ce coup-ci (rejouer / autre seed / +reps).
+Reading the verdict:
+  - PLAIN divergent + ZEROEMPTY identical -> ROOT CAUSE CONFIRMED (np.empty).
+  - PLAIN divergent + ZEROEMPTY divergent -> the entropy is on the C-extension side
+    (proxsuite / mujoco / pinocchio), not a Python np.empty -> next step:
+    capture the actual QP matrices at tick ~50 and test ProxQP on them,
+    or enable the solver's determinism flags.
+  - PLAIN identical -> not reproduced this time (replay / another seed / +reps).
 
-Usage (terminal Anaconda, depuis pal_talos/) :
+Usage (Anaconda terminal, from pal_talos/):
     python s2_probe_qp.py                 # seed 3, ~6-8 min (4 runs)
     python s2_probe_qp.py --seed 2
-Sorties : probe_qp_out/  (npz par run + probe_qp_report.md)
+Outputs: probe_qp_out/  (npz per run + probe_qp_report.md)
 """
 import argparse, os, subprocess, sys, time
 import numpy as np
@@ -41,8 +41,8 @@ FROZEN = ["--steps", "70", "--offlat", "0.08", "--dsovl", "0.12", "--tmin", "0.2
 SCRIPT = "talos_dcm_walk_timing.py"
 TIMEOUT = 900
 
-# Bootstrap injecte dans l'enfant : patche np.empty/np.empty_like AVANT que le
-# walker n'alloue quoi que ce soit, puis execute le script comme __main__.
+# Bootstrap injected into the child: patches np.empty/np.empty_like BEFORE the
+# walker allocates anything, then runs the script as __main__.
 BOOT = (
     "import numpy as _np\n"
     "_np.empty = (lambda *a, **k: _np.zeros(*a, **k))\n"
@@ -77,23 +77,23 @@ def load(npz):
 
 def compare(a, b):
     if a is None or b is None:
-        return dict(identical=False, first=-1, maxabs=float("nan"), note="run manquant")
+        return dict(identical=False, first=-1, maxabs=float("nan"), note="missing run")
     na, nb = len(a["com"]), len(b["com"])
     if na == nb and np.array_equal(a["com"], b["com"]):
-        return dict(identical=True, first=-1, maxabs=0.0, note="bit-identique")
+        return dict(identical=True, first=-1, maxabs=0.0, note="bit-identical")
     m = min(na, nb)
     diff = np.abs(a["com"][:m] - b["com"][:m])
     nz = np.nonzero(diff > 0)[0]
     first = int(nz[0]) if nz.size else -1
-    note = "longueurs %d vs %d" % (na, nb) if na != nb else "valeurs differentes"
+    note = "lengths %d vs %d" % (na, nb) if na != nb else "different values"
     return dict(identical=False, first=first, maxabs=float(diff.max()), note=note)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seed", type=int, default=3, help="seed divergent connu (3, 2 ou 0)")
+    ap.add_argument("--seed", type=int, default=3, help="known divergent seed (3, 2 or 0)")
     ap.add_argument("--reps", type=int, default=6,
-                    help="repetitions/mode ; la divergence est RARE -> >=6 pour trancher")
+                    help="repetitions/mode; the divergence is RARE -> >=6 to decide")
     ap.add_argument("--outdir", type=str, default="probe_qp_out")
     ap.add_argument("--modes", nargs="+", default=["plain", "zeroempty"])
     a = ap.parse_args()
@@ -108,23 +108,23 @@ def main():
             o = load(npz)
             data[(mode, rep)] = o
             tag = ("dist=%.3f fell=%.1f %s" % (o["dist"], o["fell"],
-                   "SUCCESS" if o["succ"] else "fail")) if o else "CRASH (pas de npz)"
+                   "SUCCESS" if o["succ"] else "fail")) if o else "CRASH (no npz)"
             print("  %-9s r%d : %-30s (%.0f s)" % (mode, rep, tag, wall))
 
-    # La divergence est RARE -> on compte les trajectoires UNIQUES par mode
-    # (empreinte bit-a-bit de com_err). Discriminateur statistique de l'hypothese
-    # np.empty : si zeroempty s'effondre a 1 trajectoire alors que plain en montre
-    # plusieurs, la memoire non-init est la cause. Si les deux montrent de la
-    # dispersion, l'entropie est ailleurs (C-extension / niveau process).
+    # The divergence is RARE -> count the UNIQUE trajectories per mode
+    # (bit-for-bit fingerprint of com_err). Statistical discriminator for the
+    # np.empty hypothesis: if zeroempty collapses to 1 trajectory while plain shows
+    # several, uninitialised memory is the cause. If both show
+    # spread, the entropy is elsewhere (C-extension / process level).
     import hashlib
 
     def sig(o):
         return hashlib.md5(o["com"].tobytes()).hexdigest()[:8] if o else "MISSING"
 
-    lines = ["# S2 — Probe root-cause QP (P1e)", "",
-             "Seed %d, config `%s`. %d repetitions/mode. La divergence etant RARE, "
-             "on compte les trajectoires com_err UNIQUES." % (a.seed, " ".join(FROZEN), a.reps), "",
-             "| mode | #runs | #traj. uniques | distances distinctes | #chutes |",
+    lines = ["# S2 — QP root-cause probe (P1e)", "",
+             "Seed %d, config `%s`. %d repetitions/mode. Since the divergence is RARE, "
+             "we count the UNIQUE com_err trajectories." % (a.seed, " ".join(FROZEN), a.reps), "",
+             "| mode | #runs | #unique traj. | distinct distances | #falls |",
              "|---|---|---|---|---|"]
     uniq = {}
     for mode in a.modes:
@@ -139,31 +139,31 @@ def main():
     lines += ["", "## Verdict"]
     p, z = uniq.get("plain"), uniq.get("zeroempty")
     if p is None or z is None:
-        v = "Resultat incomplet - voir le tableau."
+        v = "Incomplete result - see the table."
     elif p > 1 and z == 1:
-        v = ("ROOT CAUSE = memoire non-initialisee (np.empty). plain diverge, zeroempty "
-             "s'effondre a 1 trajectoire. FIX : remplacer np.empty par np.zeros aux "
-             "pre-allocations H/g/A dans talos_wbc.py -> determinisme par seed recuperable "
-             "(protocole vraiment reproductible, coeur PQ4). Re-lancer s2_determinism.py.")
+        v = ("ROOT CAUSE = uninitialised memory (np.empty). plain diverges, zeroempty "
+             "collapses to 1 trajectory. FIX: replace np.empty with np.zeros at the "
+             "H/g/A pre-allocations in talos_wbc.py -> per-seed determinism recoverable "
+             "(truly reproducible protocol). Re-run s2_determinism.py.")
     elif p > 1 and z > 1:
-        v = ("np.empty EXCLU : les deux modes dispersent (plain %d, zeroempty %d traj. uniques). "
-             "L'entropie est cote C-extension / niveau process (proxsuite / mujoco / ASLR), "
-             "pas un buffer Python. Evenement RARE (bascule d'ensemble actif du QP ou detection "
-             "de contact marginale). Options : (i) dumper les matrices du QP au 1er solve + "
-             "probe ProxQP isole ; (ii) l'accepter comme limite documentee, unite reproductible "
-             "= taux agrege." % (p, z))
+        v = ("np.empty RULED OUT: both modes spread (plain %d, zeroempty %d unique traj.). "
+             "The entropy is on the C-extension / process side (proxsuite / mujoco / ASLR), "
+             "not a Python buffer. RARE event (QP active-set switch or marginal "
+             "contact detection). Options: (i) dump the QP matrices at the first solve + "
+             "isolated ProxQP probe; (ii) accept it as a documented limitation, reproducible unit "
+             "= aggregate rate." % (p, z))
     elif p == 1 and z == 1:
-        v = ("Aucune divergence sur %d reps/mode : pour ce seed la bascule n'a pas fire "
-             "(evenement rare). Rejouer, --reps 12, ou --seed 2/0." % a.reps)
+        v = ("No divergence over %d reps/mode: for this seed the switch did not fire "
+             "(rare event). Replay, --reps 12, or --seed 2/0." % a.reps)
     else:
-        v = ("plain stable %d, zeroempty disperse %d : le patch a DEPLACE le declencheur "
-             "(adresses differentes) sans le creer -> entropie niveau process, pas un garbage "
-             "lu a chaque tick. Traiter comme limite documentee." % (p, z))
+        v = ("plain stable %d, zeroempty spread %d: the patch MOVED the trigger "
+             "(different addresses) without creating it -> process-level entropy, not garbage "
+             "read at every tick. Treat as a documented limitation." % (p, z))
     lines.append(v)
     lines.append("")
-    lines.append("Rappel : quel que soit le mode, l'issue macro d'un seed peut basculer entre "
-                 "invocations (seed 3 : 3.587 m SUCCESS vs 1.316 m chute) -> l'unite reproductible "
-                 "reste le TAUX AGREGE (Ch5 §5.5).")
+    lines.append("Reminder: whatever the mode, the macro outcome of a seed can flip between "
+                 "invocations (seed 3: 3.587 m SUCCESS vs 1.316 m fall) -> the reproducible unit "
+                 "remains the AGGREGATE RATE (Ch5 §5.5).")
 
     report = "\n".join(lines)
     print("\n" + report)

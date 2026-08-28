@@ -5,7 +5,7 @@
 *Pipeline cible : `pal_talos/` (MuJoCo natif + ProxQP), au-dessus de `talos_dcm_walk_timing.py` (S2) INCHANGÉ*
 
 > **But du document.** Spécifier le dernier scénario du protocole S1–S5 : marche plane sous
-> impulsions externes aléatoires, métrique principale *recovery rate* (chapitre methodologie).
+> impulsions externes aléatoires, métrique principale *recovery rate* (chapitre méthodologie).
 > Décisions David (2026-07-10) : **(1) marcheur = S2 dynamique** (`DCMWalkT`, config gelée) —
 > l'adaptation de timing (Khadiv2020) est précisément le mécanisme de récupération à tester ;
 > **(2) calibration = balayage de magnitude** — la courbe recovery-vs-impulsion EST la

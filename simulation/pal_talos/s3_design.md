@@ -209,8 +209,7 @@ label par seed) :
 4. **Ablations** : garde au sol `STEP_H` haute vs basse ; double-appui de montée long vs court.
 
 > **Insight critique.** Reprendre `s2_batch.py` garantit la comparabilité méthodologique entre
-> S1, S2 et S3 — atout pour l'argument « protocole d'évaluation reproductible » (contribution
-> PQ4). Mais le non-déterminisme par seed diagnostiqué en S2 (bifurcation discrète de l'ensemble
+> S1, S2 et S3 — atout pour l'argument « protocole d'évaluation reproductible ». Mais le non-déterminisme par seed diagnostiqué en S2 (bifurcation discrète de l'ensemble
 > actif du QP) **se propagera à S3** et sera probablement **amplifié** : les contacts au ras des
 > arêtes de marche multiplient les décisions marginales d'inclusion de contact. Il faut donc
 > anticiper que le taux agrégé S3 aura une CI plus large à N égal, et dimensionner N en

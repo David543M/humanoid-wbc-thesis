@@ -215,7 +215,7 @@ non-déterminisme** hérité de S2 (l'unité reproductible est le taux agrégé,
    `s2_batch.py`) → taux de succès + Wilson CI ; report EE (RMSE/pic/CI), CoM RMSE, QP feas, ctrl p99.
 
 > **Insight critique.** Réutiliser `s2_batch.py` garantit la comparabilité méthodologique S1–S4
-> (atout pour la contribution « protocole reproductible », PQ4). Mais le non-déterminisme par seed
+> (atout pour la contribution « protocole reproductible »). Mais le non-déterminisme par seed
 > diagnostiqué en S2 (bifurcation discrète de l'ensemble actif du QP) **se propagera** à S4, et la
 > tâche EE **ajoute des degrés de liberté à l'arbitrage** — donc potentiellement de nouvelles
 > décisions marginales du solveur. Il faut anticiper une CI au moins aussi large qu'en S2 à N égal
